@@ -1,0 +1,26 @@
+xmemory — Claude Code plugin
+Copyright (c) xmemory Inc. All rights reserved.
+
+This plugin directory (the "Plugin") — including the plugin manifest, the MCP
+configuration, the bundled skill, and the documentation — is proprietary to
+xmemory Inc.
+
+GRANT. xmemory Inc. grants a limited, non-exclusive, royalty-free permission to:
+  (a) reproduce and redistribute the Plugin solely to list, host, and distribute
+      it through the Claude Code plugin directory / marketplace and equivalent
+      Anthropic distribution channels; and
+  (b) install and use the Plugin for the sole purpose of connecting to the
+      xmemory service.
+
+RESERVATION. All other rights are reserved. Except as expressly permitted above,
+the Plugin may not be copied, modified, distributed, sublicensed, or used to
+create derivative works without xmemory Inc.'s prior written permission. The
+"xmemory" name and logo are trademarks of xmemory Inc.
+
+SERVICE TERMS. Use of the xmemory service is governed by the Terms & Conditions
+at https://xmemory.ai/terms-and-conditions.html and the Privacy Policy at
+https://xmemory.ai/privacy-policy.html.
+
+NO WARRANTY. The Plugin is provided "AS IS", without warranty of any kind, and to
+the extent permitted by law xmemory Inc. disclaims all warranties and liability
+arising from its use.

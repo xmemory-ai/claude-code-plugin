@@ -1,0 +1,26 @@
+{
+  "name": "xmemory-ai",
+  "owner": {
+    "name": "xmemory",
+    "url": "https://xmemory.ai"
+  },
+  "metadata": {
+    "description": "xmemory — persistent, schema-structured memory for Claude",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "xmemory",
+      "source": "./",
+      "description": "Persistent, schema-structured memory for Claude. Save and recall your own data through the xmemory remote MCP server — first-party storage in xmemory's own backend, never Claude's internal memory.",
+      "author": {
+        "name": "xmemory",
+        "url": "https://xmemory.ai"
+      },
+      "homepage": "https://xmemory.ai",
+      "license": "LicenseRef-Proprietary",
+      "keywords": ["memory", "mcp", "knowledge-base", "persistence", "recall", "xmemory"],
+      "category": "productivity"
+    }
+  ]
+}

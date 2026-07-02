@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "xmemory": {
+      "type": "http",
+      "url": "https://mcp.xmemory.ai"
+    },
+    "xmemory-admin": {
+      "type": "http",
+      "url": "https://mcp.xmemory.ai/admin"
+    }
+  }
+}
