@@ -12,9 +12,9 @@ tells Claude when to use it.
 ## Where this applies
 
 This is a **Claude Code** plugin (terminal CLI + IDE extensions), installed via `/plugin` and
-the plugin marketplace. **Claude Desktop, claude.ai, and mobile** do not install plugins — they
-reach the same xmemory MCP server through the **Connectors directory** instead. Both surfaces
-are backed by the one remote MCP server at `https://mcp.xmemory.ai`.
+the plugin marketplace. **Claude Desktop, claude.ai, and mobile** do not install plugins — there,
+add xmemory manually as a custom connector: Settings → Connectors → Add custom connector →
+`https://mcp.xmemory.ai`. Both surfaces reach the same remote MCP server.
 
 ## Two connections
 
@@ -58,22 +58,22 @@ plugin manifest.
 
 ## Install
 
-This repository is both the plugin and its marketplace, so you can install straight from GitHub:
+This plugin is published as its own marketplace repo, so you can install it straight from GitHub:
 
 ```
 /plugin marketplace add xmemory-ai/claude-code-plugin
 /plugin install xmemory@xmemory-ai
 ```
 
-If the plugin is listed in a Claude plugin directory (community or Anthropic's official
-`claude-plugins-official`), install it from there instead:
+Once approved, it's also available from Anthropic's community marketplace:
 
 ```
-/plugin install xmemory@<marketplace>
+/plugin marketplace add anthropics/claude-plugins-community
+/plugin install xmemory@claude-community
 ```
 
-(For local development: clone this repo and run `claude --plugin-dir .` from its root — the
-`.claude-plugin/plugin.json`, `.mcp.json`, and skill live here.)
+(For local development: clone `xmemory-ai/claude-code-plugin` and run `claude --plugin-dir .` from
+its root — the `.claude-plugin/plugin.json`, `.mcp.json`, and skill live there.)
 
 ## Tools
 
