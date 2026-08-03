@@ -1,7 +1,7 @@
 {
   "name": "xmemory",
-  "version": "0.1.0",
-  "description": "Persistent, schema-structured memory for Claude. Save and recall your own data through the xmemory remote MCP server — first-party storage in xmemory's own backend, never Claude's internal memory.",
+  "version": "0.2.0",
+  "description": "Persistent, schema-structured memory for Claude. Save and recall your own data through the xmemory remote MCP server — first-party storage in xmemory's own backend, never Claude's internal memory. Binds instances per project and loads their context at session start.",
   "author": {
     "name": "xmemory",
     "url": "https://xmemory.ai"
@@ -14,6 +14,8 @@
     "knowledge-base",
     "persistence",
     "recall",
+    "context",
+    "hooks",
     "xmemory"
   ]
 }
