@@ -1,0 +1,14 @@
+# Per-machine Claude Code settings. Never part of a published plugin, and an
+# accidental commit would push one developer's local configuration to everyone
+# who installs it.
+.claude/settings.local.json
+
+# A binding is per-checkout. This repository is the plugin, not a project that
+# uses it, so one here would be a mistake.
+.xmemory.json
+
+# The CLI credential, which holds a plaintext API key. Anyone developing the plugin
+# in-tree creates it the moment they run `xmemcli auth login`, and both bundled
+# skills tell users it must never be committed — so it must never be committable
+# from here either.
+.xmemrc.json
