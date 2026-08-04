@@ -59,10 +59,17 @@ any change.
    Just continue afterward — the write persists reliably.
 2. To answer from memory, call `read` with the user's question phrased naturally.
 3. Keep the user's framing accurate: xmemory stores **their** data in xmemory's backend; it is
-   not Claude's memory and cannot see anything the user has not written to the instance.
+   not the agent's built-in memory and cannot see anything the user has not written to the
+   instance.
 
 ## Setup
 
 This skill ships with the xmemory plugin, which registers the remote MCP server at
-`https://mcp.xmemory.ai`. On first use, Claude Code opens a browser to authorize (OAuth) and
-to choose the xmemory instance to connect to. See https://xmemory.ai/mcp for connection help.
+`https://mcp.xmemory.ai`. On first use, the client opens a browser to authorize (OAuth) and to
+choose the xmemory instance to connect to. See https://xmemory.ai/mcp for connection help.
+
+In Codex, when a `.xmemory.json` binding is in scope but no xmemory context was supplied for the
+session, use the bundled `doctor` skill. If doctor finds hooks disabled or awaiting trust, tell
+the user in one sentence: "Codex hooks load bound xmemory context at session lifecycle points;
+enable them with `[features] hooks = true` and review them with `/hooks`, and either change is
+reversible."

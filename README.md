@@ -1,20 +1,25 @@
-# xmemory — Claude Code plugin
+# xmemory agent plugin
 
-Persistent, schema-structured memory for Claude. This plugin registers the **xmemory remote
-MCP servers** so Claude Code can save and recall your own data on demand, and ships the skills and
-session hooks that tell Claude when to use them — see [What ships](#what-ships).
+Persistent, schema-structured memory for coding agents. This plugin registers the **xmemory
+remote MCP servers** so an agent can save and recall your own data on demand, and ships shared
+skills and session hooks — see [What ships](#what-ships).
 
 > **First-party positioning.** xmemory is a first-party memory store: it holds the data you
 > explicitly save to your xmemory instance, in xmemory's own backend. It does **not** read
-> Claude's built-in memory, your past chat history, or your files, email, or cloud drives — it
-> only stores and returns what is written to this instance.
+> Claude's or Codex's built-in memory, your past chat history, or your files, email, or cloud
+> drives — it only stores and returns what is written to this instance.
 
 ## Where this applies
 
-This is a **Claude Code** plugin (terminal CLI + IDE extensions), installed via `/plugin` and
-the plugin marketplace. **Claude Desktop, claude.ai, and mobile** do not install plugins — there,
-add xmemory manually as a custom connector: Settings → Connectors → Add custom connector →
-`https://mcp.xmemory.ai`. Both surfaces reach the same remote MCP server.
+The same repository is a **Claude Code** plugin and a **Codex** plugin. Claude Code reads
+`.claude-plugin/plugin.json`; Codex and ChatGPT Work read `.codex-plugin/plugin.json`. Both
+manifests reuse the same `.mcp.json` and skills. Both clients also discover
+`hooks/hooks.json`; Codex uses that conventional path automatically, so its manifest needs no
+`hooks` entry.
+
+Claude Desktop, claude.ai, and mobile do not install this plugin. There, add xmemory manually as
+a custom connector: Settings → Connectors → Add custom connector → `https://mcp.xmemory.ai`.
+All surfaces reach the same remote MCP server.
 
 ## Two connections
 
@@ -39,28 +44,42 @@ instance **interactively in the OAuth sign-in screen** (it has an instance field
 re-authorize the same entry to switch to a different instance. The published manifest cannot
 pre-fill an instance ID, because it is shared by every user.
 
-To connect to **multiple instances at the same time**, add one named server **per instance** in
-your own `.mcp.json`, each using the `/instance/<ID>` deep-link so the URLs (and therefore the
-connections) are distinct:
+To connect to **multiple instances at the same time**, add one named server **per instance**. If
+the xmemory CLI is installed, prefer the local transport: it reads the credential from the CLI's
+own configuration whenever the agent starts it, so nothing secret or session-specific is captured
+in the MCP entry.
 
-```json
-{
-  "mcpServers": {
-    "xmemory-work":     { "type": "http", "url": "https://mcp.xmemory.ai/instance/<work-instance-id>" },
-    "xmemory-personal": { "type": "http", "url": "https://mcp.xmemory.ai/instance/<personal-instance-id>" }
-  }
-}
+```bash
+# Claude Code
+claude mcp add xmemory-work -- xmemcli mcp <work-instance-id>
+
+# Codex
+codex mcp add xmemory-work -- xmemcli mcp <work-instance-id>
 ```
 
-Each entry authorizes separately and stays bound to its own instance, so they are live
-concurrently. This is a per-user customization and is intentionally not part of the shared
-plugin manifest.
+Check `xmemcli --json status` first and read both `version` and `authenticated` rather than its
+exit code. The `mcp` command requires at least `0.0.7`; upgrade an older client with
+`uv tool install --upgrade xmemcli`. If credentials are absent, run `xmemcli auth login`. If the
+CLI is absent or cannot be upgraded, use the direct OAuth form instead:
+
+```bash
+# Claude Code
+claude mcp add --transport http xmemory-work "https://mcp.xmemory.ai/instance/<work-instance-id>"
+
+# Codex
+codex mcp add xmemory-work --url "https://mcp.xmemory.ai/instance/<work-instance-id>"
+```
+
+The direct form authorizes separately through the browser; the CLI form reuses the CLI credential.
+Both stay bound to their own instance and can be live concurrently. These are per-user entries and
+are intentionally not part of the shared plugin manifest. The bundled `connect` skill detects the
+active client and shows only the applicable command.
 
 ## Project bindings (`.xmemory.json`)
 
 A **binding** records which instances an agent working in a given directory should know about,
 and how eagerly to engage each one — `autoload` (pull its context every session), `available`
-(engage on demand), or `off` (dormant). Ask Claude to "connect xmemory to this project" and the
+(engage on demand), or `off` (dormant). Ask the agent to "connect xmemory to this project" and the
 bundled `connect` skill will discover your instances and write the file.
 
 `.xmemory.json` holds **no secrets** — an instance id is not a credential — so the project-scope
@@ -96,14 +115,15 @@ the instance context that arrives with the MCP connection — works without it.
 | `xmemory-admin` MCP server | Create, list and manage instances and schemas |
 | **`connect`** skill | Discovers your instances and writes the `.xmemory.json` binding |
 | **`doctor`** skill | Reports which parts of the setup work, and what to do about the rest |
-| **`xmemory-memory`** skill | Tells Claude when to reach for the memory tools |
+| **`xmemory-memory`** skill | Describes when to reach for the memory tools |
 | **SessionStart** hook | Injects the context of instances bound `autoload` |
-| **PreCompact** hook | Reminds Claude to persist durable facts before context is summarized away |
+| **PreCompact** hook | Reminds the agent to persist durable facts before context is summarized away |
+| Codex `AGENTS.md` manager | Adds, checks, or removes the marked global fallback block |
 
-Both hooks are POSIX `sh` with **no dependencies** — no Node, Python or `jq`. Claude Code is
-distributed as a native binary, so none of those interpreters is guaranteed to be present
-alongside it; a POSIX shell is, because Claude Code needs one for its own shell tooling on every
-platform it supports.
+Both hooks are POSIX `sh` with **no dependencies** — no Node, Python or `jq`. The agent clients
+are distributed as native binaries, so none of those interpreters is guaranteed to be present
+alongside them. Codex exposes `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA` compatibility
+variables, so the same hook commands run from both manifests without a fork.
 
 Neither hook can fail a session. A project with no `.xmemory.json` gets silence. A missing CLI,
 an expired credential or an unreachable API costs context rather than blocking anything — and
@@ -118,10 +138,11 @@ the skills and MCP servers are unaffected.
 
 The PreCompact hook is a reminder, not an automatic upload. A hook has no model, so it cannot read
 a session and decide what mattered, and no mechanical rule turns "this session" into rows of an
-arbitrary schema — a grocery list and a CRM share nothing. Claude decides what to persist and
-writes it through the memory tools it already has. Nothing is sent anywhere by the hook itself.
+arbitrary schema — a grocery list and a CRM share nothing. The agent decides what to persist
+and writes it through the memory tools it already has. Nothing is sent anywhere by the hook
+itself.
 
-## Install
+## Install in Claude Code
 
 This plugin is published as its own marketplace repo, so you can install it straight from GitHub:
 
@@ -137,8 +158,34 @@ Once approved, it's also available from Anthropic's community marketplace:
 /plugin install xmemory@claude-community
 ```
 
-(For local development: clone `xmemory-ai/claude-code-plugin` and run `claude --plugin-dir .` from
-its root — the `.claude-plugin/plugin.json`, `.mcp.json`, `skills/` and `hooks/` all live there.)
+(For local development: clone `xmemory-ai/claude-code-plugin` and run `claude --plugin-dir .`
+from its root.)
+
+## Install in Codex
+
+Add this repository as a marketplace, install the plugin, and start a new session:
+
+```text
+codex plugin marketplace add xmemory-ai/claude-code-plugin
+codex plugin add xmemory@xmemory-ai
+```
+
+Codex lifecycle hooks must be enabled with `[features] hooks = true`. Plugin hooks are
+non-managed hooks, so Codex skips them until the user reviews and trusts their current definition
+with `/hooks`. The global `AGENTS.md` fallback and the `doctor` skill cover setup when hooks are
+off or not yet trusted. Ask Codex to "run xmemory doctor" to check both states and offer the
+reversible fallback installer.
+
+For local development, add the repository root as a local marketplace:
+
+```text
+codex plugin marketplace add /path/to/claude-code-plugin
+codex plugin add xmemory@xmemory-ai
+```
+
+The `.codex-plugin/plugin.json`, `.mcp.json`, `skills/`, and `hooks/` live in the same plugin
+root as their Claude Code counterparts. See [`CODEX.md`](CODEX.md) for the verified behavior,
+remaining desktop checks, and cloud limitation.
 
 ## Tools
 
@@ -199,7 +246,8 @@ Global account/fleet surface — no instance binding. Use it to provision and ma
 - Terms: https://xmemory.ai/terms-and-conditions.html
 
 © xmemory Inc. All rights reserved. The contents of this plugin directory are proprietary.
-Permission is granted to redistribute the plugin solely to distribute it through the Claude Code
-plugin directory, and to install it solely to connect to the xmemory service; all other rights
-are reserved. See [`LICENSE`](./LICENSE). Use of xmemory is governed by the
+Permission is granted to redistribute the plugin solely through the Claude Code and Codex plugin
+directories and equivalent Anthropic and OpenAI distribution channels, and to install it solely
+to connect to the xmemory service; all other rights are reserved. See [`LICENSE`](./LICENSE). Use
+of xmemory is governed by the
 [Terms & Conditions](https://xmemory.ai/terms-and-conditions.html).
