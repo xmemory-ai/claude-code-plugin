@@ -37,12 +37,22 @@ Registered is not connected. Call a cheap read-only tool — **`get_instance_id`
 the right one: it takes no arguments, changes nothing, and costs nothing.
 
 - It returns an id → authorized, and you now know which instance is connected.
-- It fails with an auth error → registered but not signed in. Fix: `/mcp`, then
-  authorize `xmemory`. A browser opens; no key is pasted anywhere.
+- It fails with an auth error → **how you fix it depends on how that entry connects**, so read the
+  entry before advising:
+
+  - **`"command": "xmemcli"`** → it authenticates with the user's own credential. `xmemcli --json
+    status` answers both likely causes in one local call: a `version` below `0.0.7` means the
+    client predates the `mcp` command and the server cannot start (`uv tool install --upgrade
+    xmemcli`), and `"authenticated": false` means it has no key (`xmemcli auth login`). Either
+    fix works without touching the MCP configuration. If the version is current and it is signed
+    in, the key may be revoked — the server's own failure line says which.
+  - **`"type": "http"` with no `Authorization`** → it signs in through the browser. Fix: `/mcp`,
+    then authorize the server. A browser opens; no key is pasted anywhere.
 
 Report the connected instance id. Users frequently have several instances and are
 surprised by which one the connection is bound to — one server entry holds one
-connection, chosen in the OAuth sign-in screen.
+connection, chosen at sign-in for a browser entry and by the `/instance/<id>` URL for a
+key-authenticated one.
 
 ## 3. Is anything bound to this directory?
 

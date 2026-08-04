@@ -25,18 +25,61 @@ Keep these two apart when talking to the user, because they are easy to conflate
 
 So binding three instances does **not** make all three readable over MCP at once. To have several
 live concurrently the user adds one named server per instance in their own `.mcp.json`, each using
-the `/instance/<ID>` deep-link:
+the `/instance/<ID>` deep-link.
 
-```json
-{
-  "mcpServers": {
-    "xmemory-work": { "type": "http", "url": "https://mcp.xmemory.ai/instance/<work-instance-id>" }
-  }
-}
+**Ask three questions in order** — no CLI, a signed-in CLI, and a CLI that is not are three
+different situations with three different fixes:
+
+```bash
+xmemcli --json status
 ```
 
+One local call, contacting nothing, reporting `version` and `authenticated` together:
+
+- **`command not found`** → no CLI. Use the direct form at the bottom of this section.
+- **`version` below `0.0.7`** → the client is too old: `mcp` arrived in 0.0.7, so registering the
+  client form would leave a server that cannot start. Ask the user to run
+  `uv tool install --upgrade xmemcli`, or use the direct form if they cannot.
+- **`"authenticated": false`** → the CLI is there but has no key. Ask the user to run
+  `xmemcli auth login` — one browser sign-in, after which this instance *and every one after it*
+  connects with none. Then use the client form.
+- **`"authenticated": true`** and the version is current → go straight to the client form below.
+
+Note it **exits 0 in every case**: it answers a question rather than reporting a fault, so read
+the fields and never the exit code.
+
+**The client form** — the CLI supplies the credential itself:
+
+```bash
+claude mcp add xmemory-work -- xmemcli mcp <work-instance-id>
+```
+
+`xmemcli mcp` is a transport, not a command a person runs: the client starts it, and it forwards
+each frame to that instance with the key read from `.xmemrc.json`. Nothing is captured when the
+entry is written, which is the point — a configuration made today still works in a session opened
+next week, on a machine whose environment carries nothing at all.
+
+Registering it before signing in loses nothing: the server reports that in its own failure line
+rather than starting silently broken, and `xmemcli auth login` fixes it without touching this
+configuration. Asking first is simply kinder than letting them find out.
+
+**The direct form** — for a user with no CLI at all:
+
+```bash
+claude mcp add --transport http xmemory-work "https://mcp.xmemory.ai/instance/<work-instance-id>"
+```
+
+That one signs in through the browser, once per entry — tell the user to authorise it with
+`/mcp`; it does not prompt on its own. This is the right form for anyone who arrived from the
+install page rather than from CLI onboarding.
+
+Two commands with the condition in words, rather than one command that tests it: a shell `if` is
+POSIX-only, and this skill is read on every platform. These are the same two forms the console's
+connect instructions give, deliberately — a user who follows the web page and a user who runs this
+skill must not end up with differently configured entries.
+
 When you bind an instance the user clearly wants live alongside another, offer to add that entry
-too — you have the id already. Each entry authorizes separately.
+too — you have the id already.
 
 ## When to use
 
