@@ -24,59 +24,69 @@ Keep these two apart when talking to the user, because they are easy to conflate
   in the OAuth sign-in screen.
 
 So binding three instances does **not** make all three readable over MCP at once. To have several
-live concurrently the user adds one named server per instance in their own `.mcp.json`, each using
-the `/instance/<ID>` deep-link.
+live concurrently the user adds one named server per instance. The registration command differs
+between Claude Code and Codex; identify the current client and show only its command rather than
+making the user choose between client names.
 
-**Ask three questions in order** — no CLI, a signed-in CLI, and a CLI that is not are three
-different situations with three different fixes:
+**Check four states in order** — no CLI, an outdated CLI, a signed-in current CLI, and an
+installed but signed-out current CLI have different fixes:
 
 ```bash
 xmemcli --json status
 ```
 
-One local call, contacting nothing, reporting `version` and `authenticated` together:
+One local call, contacting nothing, reports `version` and `authenticated` together:
 
 - **`command not found`** → no CLI. Use the direct form at the bottom of this section.
-- **`version` below `0.0.7`** → the client is too old: `mcp` arrived in 0.0.7, so registering the
-  client form would leave a server that cannot start. Ask the user to run
-  `uv tool install --upgrade xmemcli`, or use the direct form if they cannot.
-- **`"authenticated": false`** → the CLI is there but has no key. Ask the user to run
-  `xmemcli auth login` — one browser sign-in, after which this instance *and every one after it*
-  connects with none. Then use the client form.
-- **`"authenticated": true`** and the version is current → go straight to the client form below.
+- **`version` below `0.0.7`** → the client is too old: `mcp` arrived in 0.0.7, so registering
+  the client form would leave a server that cannot start. Ask the user to run
+  `uv tool install --upgrade xmemcli`, or use the direct form if they cannot upgrade.
+- **`"authenticated": false`** → ask the user to run `xmemcli auth login`. One browser
+  sign-in then serves this instance and every later client-form entry. Continue after it succeeds.
+- **`"authenticated": true`** and `version` is at least `0.0.7` → go straight to the client
+  form below.
 
-Note it **exits 0 in every case**: it answers a question rather than reporting a fault, so read
-the fields and never the exit code.
+`status` exits 0 whether credentials are present or absent: read the fields, never infer readiness
+from the exit code.
 
-**The client form** — the CLI supplies the credential itself:
+**The client form** — the CLI supplies the credential itself. Use the command for the active
+client and omit the other one from the user-facing answer:
 
 ```bash
+# Claude Code
 claude mcp add xmemory-work -- xmemcli mcp <work-instance-id>
+
+# Codex
+codex mcp add xmemory-work -- xmemcli mcp <work-instance-id>
 ```
 
 `xmemcli mcp` is a transport, not a command a person runs: the client starts it, and it forwards
 each frame to that instance with the key read from `.xmemrc.json`. Nothing is captured when the
-entry is written, which is the point — a configuration made today still works in a session opened
-next week, on a machine whose environment carries nothing at all.
+entry is written, so it keeps working in later sessions without an exported environment variable.
 
-Registering it before signing in loses nothing: the server reports that in its own failure line
-rather than starting silently broken, and `xmemcli auth login` fixes it without touching this
-configuration. Asking first is simply kinder than letting them find out.
+Registering it before signing in loses nothing: the server reports the missing credential in its
+failure line, and `xmemcli auth login` fixes it without changing the MCP entry. Checking first
+simply avoids leaving the user with a connection that initially looks broken.
 
-**The direct form** — for a user with no CLI at all:
+**The direct form** — when the CLI is absent or too old and cannot be upgraded. Again, show only
+the active client's command:
 
 ```bash
+# Claude Code
 claude mcp add --transport http xmemory-work "https://mcp.xmemory.ai/instance/<work-instance-id>"
+
+# Codex
+codex mcp add xmemory-work --url "https://mcp.xmemory.ai/instance/<work-instance-id>"
 ```
 
-That one signs in through the browser, once per entry — tell the user to authorise it with
-`/mcp`; it does not prompt on its own. This is the right form for anyone who arrived from the
-install page rather than from CLI onboarding.
+This form signs in through the browser once per entry. In Claude Code, authorize the named server
+with `/mcp` or `claude mcp login xmemory-work`. In Codex, use `codex mcp login xmemory-work`; `/mcp`
+shows the resulting connection. It does not authorize itself merely because it was registered.
 
-Two commands with the condition in words, rather than one command that tests it: a shell `if` is
-POSIX-only, and this skill is read on every platform. These are the same two forms the console's
-connect instructions give, deliberately — a user who follows the web page and a user who runs this
-skill must not end up with differently configured entries.
+Keep the two conditions as separate commands, not one shell conditional. This skill is used on
+POSIX shells and PowerShell, so choosing the applicable command in the instructions is portable
+while a shell `if` is not. Use the same client-first/direct-fallback sequence everywhere so the
+console and plugin cannot produce differently configured entries.
 
 When you bind an instance the user clearly wants live alongside another, offer to add that entry
 too — you have the id already.
