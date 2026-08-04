@@ -5,14 +5,14 @@
     "url": "https://xmemory.ai"
   },
   "metadata": {
-    "description": "xmemory — persistent, schema-structured memory for Claude",
-    "version": "0.2.0"
+    "description": "xmemory \u2014 persistent, schema-structured memory",
+    "version": "0.3.0"
   },
   "plugins": [
     {
       "name": "xmemory",
       "source": "./",
-      "description": "Persistent, schema-structured memory for Claude. Save and recall your own data through the xmemory remote MCP server — first-party storage in xmemory's own backend, never Claude's internal memory. Binds instances per project and loads their context at session start.",
+      "description": "Persistent, schema-structured memory for coding agents. Save and recall your own data through xmemory's remote MCP server, bind instances per project, and load their context at session start.",
       "author": {
         "name": "xmemory",
         "url": "https://xmemory.ai"

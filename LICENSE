@@ -1,4 +1,4 @@
-xmemory — Claude Code plugin
+xmemory — Claude Code and Codex plugin
 Copyright (c) xmemory Inc. All rights reserved.
 
 This plugin directory (the "Plugin") — including the plugin manifest, the MCP
@@ -7,8 +7,8 @@ xmemory Inc.
 
 GRANT. xmemory Inc. grants a limited, non-exclusive, royalty-free permission to:
   (a) reproduce and redistribute the Plugin solely to list, host, and distribute
-      it through the Claude Code plugin directory / marketplace and equivalent
-      Anthropic distribution channels; and
+      it through the Claude Code and Codex plugin directories / marketplaces
+      and equivalent Anthropic and OpenAI distribution channels; and
   (b) install and use the Plugin for the sole purpose of connecting to the
       xmemory service.
 

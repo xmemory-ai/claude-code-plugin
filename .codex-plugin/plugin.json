@@ -1,0 +1,42 @@
+{
+  "name": "xmemory",
+  "version": "0.3.0",
+  "description": "Persistent, schema-structured memory for Codex. Save and recall your own data through xmemory's remote MCP server, bind instances per project, and load their context at session start.",
+  "author": {
+    "name": "xmemory",
+    "url": "https://xmemory.ai"
+  },
+  "homepage": "https://xmemory.ai",
+  "repository": "https://github.com/xmemory-ai/claude-code-plugin",
+  "license": "LicenseRef-Proprietary",
+  "keywords": [
+    "memory",
+    "mcp",
+    "knowledge-base",
+    "persistence",
+    "recall",
+    "context",
+    "hooks",
+    "xmemory"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "xmemory",
+    "shortDescription": "Persistent, schema-structured memory",
+    "longDescription": "Save and recall data through xmemory, bind memory instances to projects, and load their context at session start.",
+    "developerName": "xmemory",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Recall what I have saved about this project.",
+      "Connect an xmemory instance to this project."
+    ],
+    "websiteURL": "https://xmemory.ai",
+    "privacyPolicyURL": "https://xmemory.ai/privacy-policy.html",
+    "termsOfServiceURL": "https://xmemory.ai/terms-and-conditions.html"
+  }
+}
