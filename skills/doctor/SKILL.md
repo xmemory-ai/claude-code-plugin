@@ -5,10 +5,11 @@ description: Use when xmemory is not behaving as expected — memory tools missi
 
 # Diagnose an xmemory setup
 
-Five things have to line up, and they **fail independently**. Check all five before
-concluding anything — a report that stops at the first failure sends people to fix
-the wrong thing, and "xmemory is broken" almost always means exactly one of these is
-missing while the rest are fine.
+Five cross-client things have to line up, and they **fail independently**. Check all
+five before concluding anything — a report that stops at the first failure sends
+people to fix the wrong thing, and "xmemory is broken" almost always means exactly
+one of these is missing while the rest are fine. In Codex, run the two Codex-only
+checks afterward.
 
 | # | Check | Without it |
 |---|-------|------------|
@@ -28,8 +29,14 @@ means the separate `xmemory-admin` server is registered too — the two are regi
 and authorized independently, so one working says nothing about the other.
 
 If no xmemory tools exist at all, the plugin is not installed or the client has not
-reloaded. Fix: `/plugin marketplace add xmemory-ai/claude-code-plugin` then
-`/plugin install xmemory@xmemory-ai`, and restart the client.
+reloaded.
+
+- Claude Code: `/plugin marketplace add xmemory-ai/claude-code-plugin`, then
+  `/plugin install xmemory@xmemory-ai`.
+- Codex: `codex plugin marketplace add xmemory-ai/claude-code-plugin`, then
+  `codex plugin add xmemory@xmemory-ai`.
+
+Start a new session after installation.
 
 ## 2. Is the connection authorized?
 
@@ -37,22 +44,28 @@ Registered is not connected. Call a cheap read-only tool — **`get_instance_id`
 the right one: it takes no arguments, changes nothing, and costs nothing.
 
 - It returns an id → authorized, and you now know which instance is connected.
-- It fails with an auth error → **how you fix it depends on how that entry connects**, so read the
-  entry before advising:
+- It fails with an auth error → **inspect how that entry connects before advising**, because
+  the two forms have different fixes:
 
-  - **`"command": "xmemcli"`** → it authenticates with the user's own credential. `xmemcli --json
-    status` answers both likely causes in one local call: a `version` below `0.0.7` means the
-    client predates the `mcp` command and the server cannot start (`uv tool install --upgrade
-    xmemcli`), and `"authenticated": false` means it has no key (`xmemcli auth login`). Either
-    fix works without touching the MCP configuration. If the version is current and it is signed
-    in, the key may be revoked — the server's own failure line says which.
-  - **`"type": "http"` with no `Authorization`** → it signs in through the browser. Fix: `/mcp`,
-    then authorize the server. A browser opens; no key is pasted anywhere.
+  - **Stdio with `command: xmemcli`** → it authenticates with the CLI credential. Run
+    `xmemcli --json status`, which reports both likely causes locally. A `version` below `0.0.7`
+    predates the `mcp` command, so upgrade with `uv tool install --upgrade xmemcli`. If the version
+    is current but `authenticated` is false, run `xmemcli auth login`. Either fix leaves the MCP
+    configuration intact. If the version is current and credentials are present, the key may have
+    been revoked; the server's failure line distinguishes that case.
+  - **Streamable HTTP with no bearer token or `Authorization` header** → it authenticates in
+    the browser. In Claude Code, use `/mcp` or `claude mcp login <server-name>`. In Codex, use
+    `codex mcp login <server-name>`; `/mcp` shows the connection afterward.
+
+  For Codex, `codex mcp get <server-name> --json` reports these as
+  `transport.type: "stdio"` and `transport.type: "streamable_http"`. For Claude Code, inspect the
+  named MCP entry and distinguish `"command": "xmemcli"` from `"type": "http"`. Never print
+  environment values, headers, or credential files while inspecting an entry.
 
 Report the connected instance id. Users frequently have several instances and are
 surprised by which one the connection is bound to — one server entry holds one
-connection, chosen at sign-in for a browser entry and by the `/instance/<id>` URL for a
-key-authenticated one.
+connection, chosen at sign-in for the bundled browser entry and fixed by the instance id in a
+per-instance entry.
 
 ## 3. Is anything bound to this directory?
 
@@ -86,7 +99,7 @@ Two separate states; check both, because the fix differs:
 
 ```bash
 command -v xmemcli        # installed?
-xmemcli auth status       # signed in? (prints the account and key prefix)
+xmemcli --json status     # version and whether local credentials are present
 ```
 
 - Not installed → `uv tool install xmemcli` (or `pip install xmemcli`).
@@ -203,6 +216,52 @@ to keep depends on what the script does: a hook that knows a specific schema —
 typed plan steps, keying state to a git branch — does more than the plugin's
 deliberately schema-agnostic version ever can, and telling someone to remove it would
 quietly cost them that.
+
+## Codex only: are hooks enabled and trusted?
+
+Run `codex features list` and find the effective state of `hooks`.
+
+- `hooks ... true` means lifecycle hooks are enabled.
+- `hooks ... false` means plugin hooks are loaded but cannot run.
+
+Enabling hooks does not trust a plugin's commands. `/hooks` lists every discovered
+definition; a new or changed non-managed hook is skipped until the user reviews and
+trusts its current hash there. Do not use `--dangerously-bypass-hook-trust` as a setup
+shortcut.
+
+When either state explains missing context, tell the user in one sentence: "Codex
+hooks load bound xmemory context at session lifecycle points; enable them with
+`[features] hooks = true` and review them with `/hooks`, and either change is
+reversible."
+
+## Codex only: is the global fallback active?
+
+This skill includes [`scripts/manage_codex_agents.sh`](scripts/manage_codex_agents.sh).
+Resolve that linked resource to its absolute installed path, then run its `status`
+action. It checks the active Codex home (`$CODEX_HOME`, otherwise `~/.codex`)
+without changing anything:
+
+```bash
+sh <resolved-manager-path> status
+```
+
+If the fallback is absent, offer the `install` action. It adds or refreshes one marked
+block in `AGENTS.md`, preserves everything outside the markers, and is idempotent.
+Installing global instructions is a user-level configuration change, so do not run it
+until the user asks for the fix:
+
+```bash
+sh <resolved-manager-path> install
+```
+
+The inverse action removes only that block:
+
+```bash
+sh <resolved-manager-path> remove
+```
+
+A non-empty `AGENTS.override.md` shadows the ordinary global `AGENTS.md`; the script
+reports that state instead of claiming the fallback is active.
 
 ## Reporting
 
