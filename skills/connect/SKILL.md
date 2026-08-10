@@ -277,11 +277,11 @@ upgrade older clients first):
 xmemcli auth login --email <their-address>
 ```
 
-The CLI prints a short matching code and waits. The user's single action is opening the
-sign-in email and pressing **Approve** after checking the page shows the same code — relay
-the code from the terminal so they can compare. The command blocks until the approval
-arrives (up to ten minutes), so run it with a generous timeout and tell the user before
-starting it that an email is on its way; `--timeout <seconds>` shortens the wait. The
+The CLI reports the email is on its way and waits. The user's single action is opening the
+sign-in email and pressing **Approve** — only for a sign-in they just asked for. The
+command blocks until the approval arrives (up to ten minutes), so run it with a generous
+timeout and tell the user before starting it that an email is on its way;
+`--timeout <seconds>` shortens the wait. The
 credential is written straight to the CLI's own store and is never printed, so it never
 enters the conversation. If the CLI reports that the server offered no cross-device
 approval, fall back to the browser flow above.

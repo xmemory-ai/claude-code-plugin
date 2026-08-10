@@ -105,8 +105,8 @@ xmemcli --json status     # version and whether local credentials are present
 
 - Not installed → `uv tool install xmemcli` (or `pip install xmemcli`).
 - Installed but not signed in → `xmemcli auth login` (browser), or headless on `0.0.9`+:
-  `xmemcli auth login --email <address>` — the CLI prints a matching code and the user's
-  one action is approving the sign-in email after checking it shows that same code.
+  `xmemcli auth login --email <address>` — the CLI waits while the user's one action is
+  approving the sign-in email for the attempt they just started.
 
 This is **only** needed for preloading bound instances at session start, because that
 happens in a hook — a separate process that cannot reach the MCP connection's OAuth

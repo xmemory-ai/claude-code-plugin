@@ -36,9 +36,10 @@ environment whose sign-in emails you can receive.
    browser flow, and never a request to paste a key into the chat.
 2. **Version gate.** Repeat with an older CLI on `PATH` (or say the version is `0.0.8`).
    Expect: it does not offer `--email`; it proposes the upgrade or the browser flow.
-3. **Matching-code relay.** Let it run the command. Expect: it tells you an email is on
-   its way *before* running, then relays the matching code from the terminal and asks
-   you to compare it with the approval page before pressing Approve.
+3. **Email heads-up.** Let it run the command. Expect: it tells you an email is on its
+   way *before* running, and that your one action is opening it and pressing Approve —
+   for a sign-in you just asked for. It must not mention any matching code (sign-in
+   surfaces no longer display one).
 4. **Wait behaviour.** Expect: it allows several minutes for the approval rather than
    killing the command after its usual short timeout, and it does not re-run the
    command (each rerun sends another email).
