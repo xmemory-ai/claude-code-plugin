@@ -59,7 +59,7 @@ codex mcp add xmemory-work -- xmemcli mcp <work-instance-id>
 
 Check `xmemcli --json status` first and read both `version` and `authenticated` rather than its
 exit code. The `mcp` command requires at least `0.0.7`; upgrade an older client with
-`uv tool install --upgrade xmemcli`. If credentials are absent, run `xmemcli auth login`. If the
+`uv tool install --upgrade xmemcli`. If credentials are absent, run `xmemcli auth login` (browser, or `--email <address>` for a headless emailed approval). If the
 CLI is absent or cannot be upgraded, use the direct OAuth form instead:
 
 ```bash
@@ -104,7 +104,9 @@ several](#one-instance-vs-several) above).
 
 Autoload additionally needs the [`xmemcli`](https://pypi.org/project/xmemcli/) command-line client
 (`uv tool install xmemcli`), because pulling context at session start happens in a separate process
-that cannot reach the MCP OAuth token and needs its own credential. Everything else — binding, and
+that cannot reach the MCP OAuth token and needs its own credential — acquired once with
+`xmemcli auth login` (browser handoff), or headlessly with `xmemcli auth login --email <address>`,
+where the single human action is approving a sign-in email. Everything else — binding, and
 the instance context that arrives with the MCP connection — works without it.
 
 ## What ships

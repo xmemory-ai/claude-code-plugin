@@ -67,7 +67,7 @@ EOF
     [ "$autoload" = "1" ] || exit 0
     emit "SessionStart" "This project binds an xmemory instance for autoload ($(printf '%s' "$bindings" | tr '\n' ' ')), but the xmemory CLI is not installed, so it was not preloaded.
 
-Memory tools still work over the xmemory MCP connection if one is authorised. To preload bound instances at session start, the user can install the CLI: 'uv tool install xmemcli' then 'xmemcli auth login'. Mention this once if it is relevant; do not repeat it."
+Memory tools still work over the xmemory MCP connection if one is authorised. To preload bound instances at session start, the user can install the CLI: 'uv tool install xmemcli' then 'xmemcli auth login' (or 'xmemcli auth login --email <address>' for a headless emailed approval). Mention this once if it is relevant; do not repeat it."
 fi
 
 # --binding-dir pins the CLI to the same root the walk above used. Without it the

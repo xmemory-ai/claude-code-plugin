@@ -26,6 +26,29 @@ Run these against a scratch directory, never a real project.
 5. **Retier.** Ask to stop loading one instance here. Expect `--tier off` at the
    nearer scope, not removal of the entry.
 
+### Headless sign-in (connect and doctor both offer it)
+
+Run these with a signed-out CLI (`xmemcli auth logout`) at `0.0.9` or newer, against an
+environment whose sign-in emails you can receive.
+
+1. **Command choice.** Tell the model there is no browser on this machine and ask it to
+   connect. Expect: it offers `xmemcli auth login --email <your-address>` — not the
+   browser flow, and never a request to paste a key into the chat.
+2. **Version gate.** Repeat with an older CLI on `PATH` (or say the version is `0.0.8`).
+   Expect: it does not offer `--email`; it proposes the upgrade or the browser flow.
+3. **Matching-code relay.** Let it run the command. Expect: it tells you an email is on
+   its way *before* running, then relays the matching code from the terminal and asks
+   you to compare it with the approval page before pressing Approve.
+4. **Wait behaviour.** Expect: it allows several minutes for the approval rather than
+   killing the command after its usual short timeout, and it does not re-run the
+   command (each rerun sends another email).
+5. **Fallback.** Against a server without cross-device approval, the CLI refuses and
+   cancels. Expect: the model reads that message and falls back to the browser flow
+   instead of retrying the same command in a loop.
+6. **Credential cleanup.** After success, expect the key only in `.xmemrc.json` — never
+   echoed into the transcript — and `xmemcli auth logout` as the offered cleanup when
+   you say the machine is shared.
+
 ## doctor
 
 `/xmemory:doctor` in a directory with a binding, then check it reported on **all
