@@ -65,3 +65,10 @@ this skill exists to avoid.
 Then break one thing at a time and confirm the report still covers the others: sign out
 (`xmemcli auth logout`), rename `.xmemory.json`, and set `XMEMORY_DISABLE_HOOKS=1` — that
 last one must be *named* by check 5, since every other check can pass while nothing loads.
+
+Check 4 also prices the pack. With something bound `autoload`, expect an approximate token
+figure against the budget, phrased as what a session start *would* inject rather than what
+this session was given. Bind several instances, or one whose live state is long, and run it
+with `--max-tokens` low enough to force a cut: the report should name the instance and the
+section the budget went to and offer retiering to `available` — not a reinstall. On a CLI old
+enough to return no `packs`, expect the totals alone and no suggestion that anything is broken.
