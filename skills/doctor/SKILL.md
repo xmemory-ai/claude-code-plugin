@@ -50,7 +50,8 @@ the right one: it takes no arguments, changes nothing, and costs nothing.
   - **Stdio with `command: xmemcli`** → it authenticates with the CLI credential. Run
     `xmemcli --json status`, which reports both likely causes locally. A `version` below `0.0.7`
     predates the `mcp` command, so upgrade with `uv tool install --upgrade xmemcli`. If the version
-    is current but `authenticated` is false, run `xmemcli auth login`. Either fix leaves the MCP
+    is current but `authenticated` is false, sign the CLI in — `xmemcli auth login`, or on
+    `0.0.9`+ the headless `xmemcli auth login --email <address>`. Either fix leaves the MCP
     configuration intact. If the version is current and credentials are present, the key may have
     been revoked; the server's failure line distinguishes that case.
   - **Streamable HTTP with no bearer token or `Authorization` header** → it authenticates in
@@ -103,7 +104,9 @@ xmemcli --json status     # version and whether local credentials are present
 ```
 
 - Not installed → `uv tool install xmemcli` (or `pip install xmemcli`).
-- Installed but not signed in → `xmemcli auth login`.
+- Installed but not signed in → `xmemcli auth login` (browser), or headless on `0.0.9`+:
+  `xmemcli auth login --email <address>` — the CLI waits while the user's one action is
+  approving the sign-in email for the attempt they just started.
 
 This is **only** needed for preloading bound instances at session start, because that
 happens in a hook — a separate process that cannot reach the MCP connection's OAuth

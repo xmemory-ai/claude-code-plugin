@@ -41,8 +41,13 @@ One local call, contacting nothing, reports `version` and `authenticated` togeth
 - **`version` below `0.0.7`** → the client is too old: `mcp` arrived in 0.0.7, so registering
   the client form would leave a server that cannot start. Ask the user to run
   `uv tool install --upgrade xmemcli`, or use the direct form if they cannot upgrade.
-- **`"authenticated": false`** → ask the user to run `xmemcli auth login`. One browser
-  sign-in then serves this instance and every later client-form entry. Continue after it succeeds.
+- **`"authenticated": false`** → sign the CLI in: ask the user to run `xmemcli auth login`
+  (browser), or — when `version` is `0.0.9` or newer — run the headless
+  `xmemcli auth login --email <their-address>` on their behalf; see
+  [Does the user need the CLI?](#does-the-user-need-the-cli) for how that approval works. On an
+  older client the headless flag does not exist: offer the browser flow, or
+  `uv tool install --upgrade xmemcli` first. One sign-in then serves this instance and every
+  later client-form entry. Continue after it succeeds.
 - **`"authenticated": true`** and `version` is at least `0.0.7` → go straight to the client
   form below.
 
@@ -65,7 +70,8 @@ each frame to that instance with the key read from `.xmemrc.json`. Nothing is ca
 entry is written, so it keeps working in later sessions without an exported environment variable.
 
 Registering it before signing in loses nothing: the server reports the missing credential in its
-failure line, and `xmemcli auth login` fixes it without changing the MCP entry. Checking first
+failure line, and `xmemcli auth login` — browser, or its headless `--email` variant — fixes it
+without changing the MCP entry. Checking first
 simply avoids leaving the user with a connection that initially looks broken.
 
 **The direct form** — when the CLI is absent or too old and cannot be upgraded. Again, show only
@@ -262,6 +268,23 @@ take effect, and offer the install:
 uv tool install xmemcli    # or: pip install xmemcli
 xmemcli auth login
 ```
+
+When there is no browser on this machine — or the user would rather not click through the
+Console — run the headless variant on their behalf (it needs `xmemcli` `0.0.9` or newer;
+upgrade older clients first):
+
+```bash
+xmemcli auth login --email <their-address>
+```
+
+The CLI reports the email is on its way and waits. The user's single action is opening the
+sign-in email and pressing **Approve** — only for a sign-in they just asked for. The
+command blocks until the approval arrives (up to ten minutes), so run it with a generous
+timeout and tell the user before starting it that an email is on its way;
+`--timeout <seconds>` shortens the wait. The
+credential is written straight to the CLI's own store and is never printed, so it never
+enters the conversation. If the CLI reports that the server offered no cross-device
+approval, fall back to the browser flow above.
 
 Mention it once, at that moment. Do not bring it up when everything is bound `available`, do not
 repeat it in later sessions, and never block the binding on it — a binding written today starts
