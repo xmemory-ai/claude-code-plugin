@@ -185,10 +185,12 @@ is not in the message. Anything else: take the CLI at its word.
 
 ### What the pack costs
 
-Swap `--text` for `--json` and the same command also prices what it printed: `estimated_tokens`
-against `max_tokens` for the whole injection, and a `packs` entry per instance carrying
-`truncated` and a per-section breakdown. Report it as part of this check, and only here — an
-agent volunteering token figures during ordinary work is noise nobody asked for.
+The sizes are part of the same command's structured output rather than a separate mode:
+`xmemcli context --json` carries `estimated_tokens` against `max_tokens` for the whole
+injection, plus a `packs` entry per instance with `truncated` and a per-section breakdown.
+The default rendering prints the pack alone because that is what a session-start hook pipes
+into the session. Report the numbers as part of this check, and only here — an agent
+volunteering token figures during ordinary work is noise nobody asked for.
 
 Two things it settles that nothing else can:
 
