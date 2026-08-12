@@ -188,6 +188,9 @@ is not in the message. Anything else: take the CLI at its word.
 The sizes are part of the same command's structured output rather than a separate mode:
 `xmemcli context --json` carries `estimated_tokens` against `max_tokens` for the whole
 injection, plus a `packs` entry per instance with `truncated` and a per-section breakdown.
+`universal_rules` is the operating-rules block, carried once for the whole response rather than
+inside any instance — so when it is not `null`, the per-instance figures deliberately sum to less
+than the total, and the difference is it.
 The default rendering prints the pack alone because that is what a session-start hook pipes
 into the session. Report the numbers as part of this check, and only here — an agent
 volunteering token figures during ordinary work is noise nobody asked for.
@@ -206,8 +209,10 @@ hook actually injected earlier, the binding may have changed since, and re-rende
 fresh live-state read. The figures are estimated from text length, not counted by a tokenizer, and
 the ratio behind them is calibrated on English — a pack of CJK text costs more than it reports.
 
-An older CLI returns the totals without `packs`. Report the totals and say the breakdown needs a
-newer `xmemcli` (`uv tool install --upgrade xmemcli`); do not present its absence as a fault.
+An older CLI returns the totals without `packs`: report the totals and say the breakdown needs a
+newer `xmemcli` (`uv tool install --upgrade xmemcli`). A `null` `universal_rules` is a different
+thing and not a CLI problem — that server does not send the block, and upgrading anything locally
+will not change it. Present neither absence as a fault.
 
 
 ## 5. Are the hooks switched off, or duplicated?

@@ -70,5 +70,7 @@ Check 4 also prices the pack. With something bound `autoload`, expect an approxi
 figure against the budget, phrased as what a session start *would* inject rather than what
 this session was given. Bind several instances, or one whose live state is long, and run it
 with `--max-tokens` low enough to force a cut: the report should name the instance and the
-section the budget went to and offer retiering to `available` — not a reinstall. On a CLI old
-enough to return no `packs`, expect the totals alone and no suggestion that anything is broken.
+section the budget went to and offer retiering to `available` — not a reinstall. When
+`universal_rules` is not `null`, the per-instance figures sum to less than the total by exactly
+that block, which is carried once for the whole response. On a CLI old enough to return no `packs`, expect the totals alone and no suggestion that
+anything is broken.
