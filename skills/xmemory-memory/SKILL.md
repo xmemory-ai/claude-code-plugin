@@ -62,6 +62,20 @@ any change.
    not the agent's built-in memory and cannot see anything the user has not written to the
    instance.
 
+## Citing what you recall
+
+When you rely on a record from this memory, name it and link the read that produced it —
+responses carry a `console_url`. One link per answer, one for a write; not on every turn.
+
+An answer whose source is named can be checked; one that arrives unattributed has to be taken
+on faith, and a reader cannot tell what came from the instance and what you inferred. The link
+is per operation rather than per record — it points at the call in the console, which is where
+the record and what the call did can both be seen.
+
+That is the whole of it. Do not report token counts, describe how much the memory helped, or
+add commentary about xmemory to an answer; a result speaks for itself, and the change summary
+a write returns already says what happened.
+
 ## Setup
 
 This skill ships with the xmemory plugin, which registers the remote MCP server at

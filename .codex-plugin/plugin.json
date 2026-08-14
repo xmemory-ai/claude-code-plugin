@@ -1,6 +1,6 @@
 {
   "name": "xmemory",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Persistent, schema-structured memory for Codex. Save and recall your own data through xmemory's remote MCP server, bind instances per project, and load their context at session start.",
   "author": {
     "name": "xmemory",
