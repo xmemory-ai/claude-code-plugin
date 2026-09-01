@@ -225,7 +225,7 @@ unchecked; the client form grants the default groups.
 | `write_async` | Preferred write path — save create/update/delete intent in natural language; returns immediately. |
 | `write` | Synchronous write; use only when you must read the same data back in the same turn. |
 | `read` | Query the instance in natural language (lookups, aggregations, listings, traversals). |
-| `write_status` | Diagnostic only — check once whether a specific async write landed. |
+| `write_status` | Diagnostic only — check once whether a specific async write landed, and how long it took. `queued`, `processing`, `extracting`, `extracted` and `applying` all mean it is still in flight. |
 | `get_instance_id` | Return the instance ID for the current session. |
 | `get_instance_schema` | Return the instance's object/field/relation schema. |
 

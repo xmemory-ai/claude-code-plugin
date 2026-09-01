@@ -34,9 +34,10 @@ answering questions from what was saved earlier.
 - **`read`** — query the instance in natural language: factual lookups, aggregations,
   listings, and traversals across stored relations. A read that returns nothing is more useful
   than a skipped one, so attempt the read even if the question looks outside the schema.
-- **`write_status`** — diagnostic only. Call once (never poll) if a read that should contain
-  written data comes back unexpectedly empty, or if the user explicitly asks whether a write
-  landed.
+- **`write_status`** — diagnostic only — check once whether a specific async write landed, and how
+  long it took. `queued`, `processing`, `extracting`, `extracted` and `applying` all mean it is
+  still in flight. Reach for it when a read that should contain written data comes
+  back unexpectedly empty, or when the user explicitly asks whether a write landed.
 - **`get_instance_id`**, **`get_instance_schema`** — return the connected instance's ID and its
   object/field/relation schema. Use `get_instance_schema` when you need to know what shapes the
   instance can store before answering a schema question.
