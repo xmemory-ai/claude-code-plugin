@@ -5,6 +5,11 @@ description: Use when xmemory is not behaving as expected — memory tools missi
 
 # Diagnose an xmemory setup
 
+xmemory is a **first-party memory store**: it holds the data you explicitly save to your
+xmemory instance, in xmemory's own backend. It does **NOT** read the assistant's built-in
+memory, your past chat history, or your files, email, or cloud drives — it only stores and
+returns what is written to this instance.
+
 Five cross-client things have to line up, and they **fail independently**. Check all
 five before concluding anything — a report that stops at the first failure sends
 people to fix the wrong thing, and "xmemory is broken" almost always means exactly
@@ -271,10 +276,9 @@ definition; a new or changed non-managed hook is skipped until the user reviews 
 trusts its current hash there. Do not use `--dangerously-bypass-hook-trust` as a setup
 shortcut.
 
-When either state explains missing context, tell the user in one sentence: "Codex
-hooks load bound xmemory context at session lifecycle points; enable them with
-`[features] hooks = true` and review them with `/hooks`, and either change is
-reversible."
+When either state explains missing context, say so in one sentence: "Codex hooks load the
+bound context at session lifecycle points; enable them with `[features] hooks = true` and
+review them with `/hooks` — either change is reversible."
 
 ## Codex only: is the global fallback active?
 

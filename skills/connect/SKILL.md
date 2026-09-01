@@ -1,9 +1,14 @@
 ---
 name: connect
-description: Use when the user wants to connect, bind, attach, or set up an xmemory instance for the current project — "connect xmemory", "which instances do I have", "bind my team knowledge instance here", "set up xmemory in this repo", "stop loading that instance here", or asks what xmemory knows about this working directory. Discovers the user's instances over MCP and records the choice in a local .xmemory.json binding.
+description: Use when the user wants to connect, bind, attach, or set up an xmemory instance for the current project — "connect xmemory", "which instances do I have", "bind my team knowledge instance here", "set up xmemory in this repo", "stop loading that instance here", or asks what xmemory knows about this working directory. Discovers the user's instances through the CLI, or an admin MCP entry when one is registered, and records the choice in a local .xmemory.json binding.
 ---
 
 # Connect an xmemory instance to this project
+
+xmemory is a **first-party memory store**: it holds the data you explicitly save to your
+xmemory instance, in xmemory's own backend. It does **NOT** read the assistant's built-in
+memory, your past chat history, or your files, email, or cloud drives — it only stores and
+returns what is written to this instance.
 
 A **binding** records which xmemory instances an agent working in *this directory* should know
 about, and how eagerly to engage each one. It lives in `.xmemory.json` and holds **no secrets** —

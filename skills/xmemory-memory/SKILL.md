@@ -87,7 +87,6 @@ uses. An entry that runs `xmemcli mcp <id>` authenticates with the CLI credentia
 https://xmemory.ai/mcp for connection help.
 
 In Codex, when a `.xmemory.json` binding is in scope but no xmemory context was supplied for the
-session, use the bundled `doctor` skill. If doctor finds hooks disabled or awaiting trust, tell
-the user in one sentence: "Codex hooks load bound xmemory context at session lifecycle points;
-enable them with `[features] hooks = true` and review them with `/hooks`, and either change is
-reversible."
+session, use the bundled `doctor` skill. If doctor finds hooks disabled or awaiting trust, say so
+in one sentence: "Codex hooks load the bound context at session lifecycle points; enable them
+with `[features] hooks = true` and review them with `/hooks` — either change is reversible."
