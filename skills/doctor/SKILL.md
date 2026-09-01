@@ -24,12 +24,20 @@ Run all five, then report. Do not stop early.
 ## 1. Is the MCP server registered?
 
 Look at the tools available to you. If `read` / `write_async` (or their namespaced
-forms) are present, the `xmemory` server is registered. `admin_list_own_instances`
-means the separate `xmemory-admin` server is registered too — the two are registered
-and authorized independently, so one working says nothing about the other.
+forms) are present, a per-instance entry is registered — the plugin bundles none, so every
+entry was registered for one specific instance, normally under the name `xmemory-<id8>`.
+`admin_list_own_instances` means an `xmemory-admin` entry was added as well; it is registered
+and authorized independently, so one working says nothing about the other, and its absence is
+the normal state rather than a fault.
 
-If no xmemory tools exist at all, the plugin is not installed or the client has not
-reloaded.
+If no xmemory tools exist at all, either no instance has been connected here yet, or an entry
+was registered in this session and the client has not restarted. Both are first-run states,
+not breakage — this skill being available proves the plugin itself is installed. Offer
+`xmemcli instance setup <id>`, which prints the registration commands for this machine, or
+`/xmemory:connect`, then a new session.
+
+If the plugin's skills are missing too, the plugin is not installed or the client has not
+reloaded:
 
 - Claude Code: `/plugin marketplace add xmemory-ai/claude-code-plugin`, then
   `/plugin install xmemory@xmemory-ai`.
@@ -65,8 +73,8 @@ the right one: it takes no arguments, changes nothing, and costs nothing.
 
 Report the connected instance id. Users frequently have several instances and are
 surprised by which one the connection is bound to — one server entry holds one
-connection, chosen at sign-in for the bundled browser entry and fixed by the instance id in a
-per-instance entry.
+connection, fixed by the instance id in its registration: the argument of `xmemcli mcp` for a
+stdio entry, the `/instance/<id>` path for an HTTP one.
 
 ## 3. Is anything bound to this directory?
 
@@ -305,6 +313,9 @@ one thing that is actually wrong over listing everything that is right.
 
 Two states worth calling out explicitly, because they read as breakage and are not:
 
+- **Plugin installed, nothing connected.** The skills and hooks are present but no
+  per-instance entry exists yet — the state right after installing. Point at
+  `xmemcli instance setup <id>` or `/xmemory:connect`; nothing is broken.
 - **Tools work, no CLI.** Fully functional for reading and writing memory; only
   session-start preloading is unavailable.
 - **Everything installed, nothing preloaded.** Almost always an `available` tier

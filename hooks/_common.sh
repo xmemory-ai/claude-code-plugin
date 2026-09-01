@@ -12,11 +12,11 @@ BINDING_FILENAME=".xmemory.json"
 # ── opt-out ────────────────────────────────────────────────────────────────
 # Claude Code has no built-in way to switch off one hook of an installed plugin,
 # so a plugin is expected to provide its own. Without this the only way to stop
-# these hooks was to uninstall the plugin — losing its skills and MCP servers
-# too — which is a poor answer for the case that needs it most: someone who
-# already wired their own SessionStart or PreCompact hook and wants to keep it.
+# these hooks was to uninstall the plugin — losing its skills too — which is a
+# poor answer for the case that needs it most: someone who already wired their
+# own SessionStart or PreCompact hook and wants to keep it.
 #
-# Set XMEMORY_DISABLE_HOOKS to any non-empty value. The skills and MCP servers
+# Set XMEMORY_DISABLE_HOOKS to any non-empty value. The skills and MCP entries
 # are unaffected; only these hooks stand down.
 hooks_disabled() {
     [ -n "${XMEMORY_DISABLE_HOOKS:-}" ]

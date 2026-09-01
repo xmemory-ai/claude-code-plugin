@@ -19,14 +19,18 @@ Keep these two apart when talking to the user, because they are easy to conflate
 
 - A **binding** says "instances X and Y matter in this directory." It is a local file. It can
   name as many instances as you like.
-- An **MCP connection** is what actually lets you read and write an instance's data. The bundled
-  `xmemory` server entry holds **one** connection, bound to **one** instance chosen interactively
-  in the OAuth sign-in screen.
+- An **MCP connection** is what actually lets you read and write an instance's data. One server
+  entry holds **one** connection to **one** instance, and the plugin bundles no entry of its
+  own — an instance is reachable only once an entry for it has been registered.
 
-So binding three instances does **not** make all three readable over MCP at once. To have several
-live concurrently the user adds one named server per instance. The registration command differs
+So binding an instance does **not** make it readable over MCP. Each instance the user wants live
+gets its own named entry. Name it `xmemory-<id8>` — `xmemory-` followed by the first eight
+characters of the instance id — because that is the name the instance's own setup instructions
+print (`xmemcli instance setup <id>`, and the console's Connect tab), so following either path
+produces one entry rather than two under different names. The registration command differs
 between Claude Code and Codex; identify the current client and show only its command rather than
-making the user choose between client names.
+making the user choose between client names. Below, `<id>` is the instance id and `<id8>` its
+first eight characters.
 
 **Check four states in order** — no CLI, an outdated CLI, a signed-in current CLI, and an
 installed but signed-out current CLI have different fixes:
@@ -59,10 +63,10 @@ client and omit the other one from the user-facing answer:
 
 ```bash
 # Claude Code
-claude mcp add xmemory-work -- xmemcli mcp <work-instance-id>
+claude mcp add xmemory-<id8> -- xmemcli mcp <id>
 
 # Codex
-codex mcp add xmemory-work -- xmemcli mcp <work-instance-id>
+codex mcp add xmemory-<id8> -- xmemcli mcp <id>
 ```
 
 `xmemcli mcp` is a transport, not a command a person runs: the client starts it, and it forwards
@@ -79,15 +83,17 @@ the active client's command:
 
 ```bash
 # Claude Code
-claude mcp add --transport http xmemory-work "https://mcp.xmemory.ai/instance/<work-instance-id>"
+claude mcp add --transport http xmemory-<id8> "https://mcp.xmemory.ai/instance/<id>"
 
 # Codex
-codex mcp add xmemory-work --url "https://mcp.xmemory.ai/instance/<work-instance-id>"
+codex mcp add xmemory-<id8> --url "https://mcp.xmemory.ai/instance/<id>"
 ```
 
 This form signs in through the browser once per entry. In Claude Code, authorize the named server
-with `/mcp` or `claude mcp login xmemory-work`. In Codex, use `codex mcp login xmemory-work`; `/mcp`
-shows the resulting connection. It does not authorize itself merely because it was registered.
+with `/mcp` or `claude mcp login xmemory-<id8>`. In Codex, use `codex mcp login xmemory-<id8>`;
+`/mcp` shows the resulting connection. It does not authorize itself merely because it was
+registered, and an entry added mid-session usually connects only after the client restarts — say
+so rather than reporting it as connected.
 
 Keep the two conditions as separate commands, not one shell conditional. This skill is used on
 POSIX shells and PowerShell, so choosing the applicable command in the instructions is portable
@@ -149,14 +155,16 @@ project binding belongs, or `--scope user` if the user's own file is genuinely w
 
 ### 1. Discover the user's instances
 
-Call the **`admin_list_own_instances`** MCP tool. This needs no CLI — it uses the same OAuth
-connection as the rest of the plugin. If it fails because the admin connection is not authorized,
-tell the user how to authorize it (`/mcp`) and offer the CLI listing below as the fallback —
-`xmemcli org list instances --json` reaches the same data through a credential the user
-already has. Stop only if neither is available; never fall back to guessing instance ids.
+Run `xmemcli org list instances --json`. It reaches the user's instances through the credential
+the CLI already holds, and the same signed-in CLI is what the client-form connection above needs,
+so this is the first thing to try. If the CLI is missing or signed out, the section above says
+how to fix that.
 
-If `xmemcli` is installed the equivalent is `xmemcli org list instances --json`, which is useful
-when the user is already authenticated there but has not authorized the admin MCP connection.
+If an `xmemory-admin` entry is registered, the **`admin_list_own_instances`** MCP tool returns the
+same listing over that connection — the plugin does not register that entry, so treat its absence
+as normal rather than as something to fix. When neither the CLI nor an admin entry is available,
+say how to get one (install and sign in the CLI, or add the admin entry) and point at the Console,
+which lists the instances too. Never fall back to guessing instance ids.
 
 If the user has no instances, say so and point them at the Console to create one. Do not invent
 a binding for an instance that does not exist.
@@ -254,12 +262,12 @@ Rules when writing it by hand:
 
 ## Does the user need the CLI?
 
-**No — not for this.** Binding works over MCP alone, and the instance context that arrives with the
-MCP connection works without any CLI.
-
-`xmemcli` adds the session-start half: it is what lets an `autoload` instance actually pull its
-context at the start of a session, because a session-start hook is a separate process that cannot
-reach the MCP OAuth token and needs its own credential.
+**Not for the binding itself** — that is a local file, written by hand if need be. The CLI is what
+discovery leans on first, what the client-form connection runs, and what the session-start half
+needs: it is what lets an `autoload` instance actually pull its context at the start of a session,
+because a session-start hook is a separate process that cannot reach an MCP OAuth token and needs
+its own credential. Without the CLI, discovery falls back to an admin entry or the Console, and the
+connection takes the direct form.
 
 So: if the user binds anything as `autoload`, mention once that the CLI is what makes autoload
 take effect, and offer the install:

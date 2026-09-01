@@ -1,8 +1,11 @@
 # xmemory agent plugin
 
-Persistent, schema-structured memory for coding agents. This plugin registers the **xmemory
-remote MCP servers** so an agent can save and recall your own data on demand, and ships shared
-skills and session hooks — see [What ships](#what-ships).
+Persistent, schema-structured memory for coding agents. This plugin ships the shared **skills**
+and **session hooks** that teach an agent when and how to use xmemory — see
+[What ships](#what-ships). The memory itself is reached over the **xmemory remote MCP server**,
+through an MCP entry registered **per instance** — see
+[Connecting an instance](#connecting-an-instance). The plugin bundles no MCP entry of its own, so
+`/mcp` never shows a connection you did not ask for.
 
 > **First-party positioning.** xmemory is a first-party memory store: it holds the data you
 > explicitly save to your xmemory instance, in xmemory's own backend. It does **not** read
@@ -13,67 +16,77 @@ skills and session hooks — see [What ships](#what-ships).
 
 The same repository is a **Claude Code** plugin and a **Codex** plugin. Claude Code reads
 `.claude-plugin/plugin.json`; Codex and ChatGPT Work read `.codex-plugin/plugin.json`. Both
-manifests reuse the same `.mcp.json` and skills. Both clients also discover
-`hooks/hooks.json`; Codex uses that conventional path automatically, so its manifest needs no
-`hooks` entry.
+manifests reuse the same skills. Both clients also discover `hooks/hooks.json`; Codex uses that
+conventional path automatically, so its manifest needs no `hooks` entry.
 
 Claude Desktop, claude.ai, and mobile do not install this plugin. There, add xmemory manually as
-a custom connector: Settings → Connectors → Add custom connector → `https://mcp.xmemory.ai`.
-All surfaces reach the same remote MCP server.
+a custom connector: Settings → Connectors → Add custom connector →
+`https://mcp.xmemory.ai/instance/<id>`, where `<id>` is the instance id. All surfaces reach the
+same remote MCP server.
 
-## Two connections
+## Connecting an instance
 
-The plugin registers two MCP servers; connect and authorize them **separately** depending on
-what you need:
+An MCP entry holds **one** connection to **one** instance, so each instance you use gets its own
+named entry. Name it `xmemory-<id8>` — `xmemory-` followed by the first eight characters of the
+instance id. That is the name the instance's own setup instructions print
+(`xmemcli instance setup <id>`, or the Connect tab in the console), so following either produces
+one entry rather than two under different names. Below, `<id>` is the instance id and `<id8>`
+its first eight characters.
 
-- **`xmemory`** — your **memory / data plane**. Connect to a single instance and read/write its
-  data. On sign-in you choose the instance to bind. This is what the bundled skill drives.
-- **`xmemory-admin`** — your **instance-management / control plane**. Create, list, and manage
-  your instances and their schemas. This connection includes powerful and destructive
-  operations (e.g. deleting an instance), so it is a deliberate, separate sign-in.
-
-Each connection authorizes independently via **OAuth 2.1 + PKCE** — a browser opens on first
-use; no static tokens are pasted into the client. Connection walkthrough:
-**https://xmemory.ai/mcp**.
-
-### One instance vs. several
-
-The bundled `xmemory` server points at the root URL `https://mcp.xmemory.ai`. A single server
-entry holds **one** connection, so it is bound to **one** instance at a time — you pick that
-instance **interactively in the OAuth sign-in screen** (it has an instance field), and you
-re-authorize the same entry to switch to a different instance. The published manifest cannot
-pre-fill an instance ID, because it is shared by every user.
-
-To connect to **multiple instances at the same time**, add one named server **per instance**. If
-the xmemory CLI is installed, prefer the local transport: it reads the credential from the CLI's
-own configuration whenever the agent starts it, so nothing secret or session-specific is captured
-in the MCP entry.
+If the xmemory CLI is installed and signed in, prefer the **client form**: the agent client
+starts `xmemcli mcp`, which reads the credential from the CLI's own configuration on every
+connection, so nothing secret or session-specific is captured in the entry and no browser
+sign-in is needed — now or in any later session.
 
 ```bash
 # Claude Code
-claude mcp add xmemory-work -- xmemcli mcp <work-instance-id>
+claude mcp add xmemory-<id8> -- xmemcli mcp <id>
 
 # Codex
-codex mcp add xmemory-work -- xmemcli mcp <work-instance-id>
+codex mcp add xmemory-<id8> -- xmemcli mcp <id>
 ```
 
 Check `xmemcli --json status` first and read both `version` and `authenticated` rather than its
 exit code. The `mcp` command requires at least `0.0.7`; upgrade an older client with
-`uv tool install --upgrade xmemcli`. If credentials are absent, run `xmemcli auth login` (browser, or `--email <address>` for a headless emailed approval). If the
-CLI is absent or cannot be upgraded, use the direct OAuth form instead:
+`uv tool install --upgrade xmemcli`. If credentials are absent, run `xmemcli auth login`
+(browser, or `--email <address>` for a headless emailed approval). If the CLI is absent or cannot
+be upgraded, use the **direct form** instead, which signs in through the browser once per entry:
+
+```bash
+# Claude Code — then authorize it with /mcp, or `claude mcp login xmemory-<id8>`
+claude mcp add --transport http xmemory-<id8> "https://mcp.xmemory.ai/instance/<id>"
+
+# Codex
+codex mcp add xmemory-<id8> --url "https://mcp.xmemory.ai/instance/<id>"
+codex mcp login xmemory-<id8>
+```
+
+Registering an entry is not the same as connecting it: an entry added mid-session usually
+connects only after the client restarts. Every entry stays bound to its own instance, and any
+number of them can be live at once. The bundled `connect` skill detects the active client and
+shows only the applicable command; it also records which instances matter in this directory —
+see [Project bindings](#project-bindings-xmemoryjson).
+
+### Instance management
+
+Creating, listing and reshaping instances is the **control plane**, and the CLI covers it:
+`xmemcli instance create`, `xmemcli org list instances`, `xmemcli instance setup`,
+`xmemcli xmd generate` / `xmemcli xmd enhance`, and `xmemcli schema …`. The plugin registers no
+admin entry.
+
+If you also want those operations as MCP tools, add the admin server yourself. It is a separate,
+deliberate sign-in because it includes destructive operations such as deleting an instance:
 
 ```bash
 # Claude Code
-claude mcp add --transport http xmemory-work "https://mcp.xmemory.ai/instance/<work-instance-id>"
+claude mcp add --transport http xmemory-admin https://mcp.xmemory.ai/admin
 
 # Codex
-codex mcp add xmemory-work --url "https://mcp.xmemory.ai/instance/<work-instance-id>"
+codex mcp add xmemory-admin --url https://mcp.xmemory.ai/admin
 ```
 
-The direct form authorizes separately through the browser; the CLI form reuses the CLI credential.
-Both stay bound to their own instance and can be live concurrently. These are per-user entries and
-are intentionally not part of the shared plugin manifest. The bundled `connect` skill detects the
-active client and shows only the applicable command.
+Direct entries authorize via **OAuth 2.1 + PKCE** — a browser opens on first use; no static
+tokens are pasted into the client. Connection walkthrough: **https://xmemory.ai/mcp**.
 
 ## Project bindings (`.xmemory.json`)
 
@@ -99,8 +112,8 @@ which credential is yours. Working in a project folder is unaffected, including 
 home directory is under version control.
 
 Binding is not the same as connecting: the binding is local bookkeeping, while an MCP server entry
-is what actually reads and writes an instance's data (see [One instance vs.
-several](#one-instance-vs-several) above).
+is what actually reads and writes an instance's data (see
+[Connecting an instance](#connecting-an-instance) above).
 
 Autoload additionally needs the [`xmemcli`](https://pypi.org/project/xmemcli/) command-line client
 (`uv tool install xmemcli`), because pulling context at session start happens in a separate process
@@ -113,14 +126,16 @@ the instance context that arrives with the MCP connection — works without it.
 
 | Component | What it does |
 |-----------|--------------|
-| `xmemory` MCP server | Read and write one instance's data |
-| `xmemory-admin` MCP server | Create, list and manage instances and schemas |
 | **`connect`** skill | Discovers your instances and writes the `.xmemory.json` binding |
 | **`doctor`** skill | Reports which parts of the setup work, and what to do about the rest |
 | **`xmemory-memory`** skill | Describes when to reach for the memory tools |
 | **SessionStart** hook | Injects the context of instances bound `autoload` |
 | **PreCompact** hook | Reminds the agent to persist durable facts before context is summarized away |
 | Codex `AGENTS.md` manager | Adds, checks, or removes the marked global fallback block |
+
+No MCP entry is bundled. Connections are registered per instance — by you, by
+`xmemcli instance setup`, or by the `connect` skill — so an entry exists only for an instance you
+chose, and it is authorized the way you registered it.
 
 Both hooks are POSIX `sh` with **no dependencies** — no Node, Python or `jq`. The agent clients
 are distributed as native binaries, so none of those interpreters is guaranteed to be present
@@ -136,7 +151,7 @@ Already wired xmemory into Claude Code by hand? Installing the plugin does not r
 hooks — both run, and context is injected twice. See [`MIGRATION.md`](MIGRATION.md);
 `/xmemory:doctor`
 reports the overlap. To keep your own hooks and stand these down, set `XMEMORY_DISABLE_HOOKS=1`;
-the skills and MCP servers are unaffected.
+the skills and your MCP entries are unaffected.
 
 The PreCompact hook is a reminder, not an automatic upload. A hook has no model, so it cannot read
 a session and decide what mattered, and no mechanical rule turns "this session" into rows of an
@@ -160,8 +175,12 @@ Once approved, it's also available from Anthropic's community marketplace:
 /plugin install xmemory@claude-community
 ```
 
-(For local development: clone `xmemory-ai/claude-code-plugin` and run `claude --plugin-dir .`
-from its root.)
+Restart Claude Code or run `/reload-plugins`, then [connect an instance](#connecting-an-instance):
+`xmemcli instance setup <id>` prints the exact commands for this machine, and `/xmemory:connect`
+records which instances this project uses.
+
+(For local development: clone `xmemory-ai/claude-code-plugin`, run `claude --plugin-dir .` from
+its root, and run `sh hooks/test_hooks.sh` and `sh test_manifest.sh` before publishing.)
 
 ## Install in Codex
 
@@ -171,6 +190,8 @@ Add this repository as a marketplace, install the plugin, and start a new sessio
 codex plugin marketplace add xmemory-ai/claude-code-plugin
 codex plugin add xmemory@xmemory-ai
 ```
+
+Then [connect an instance](#connecting-an-instance) with the Codex commands shown there.
 
 Codex lifecycle hooks must be enabled with `[features] hooks = true`. Plugin hooks are
 non-managed hooks, so Codex skips them until the user reviews and trusts their current definition
@@ -185,16 +206,17 @@ codex plugin marketplace add /path/to/claude-code-plugin
 codex plugin add xmemory@xmemory-ai
 ```
 
-The `.codex-plugin/plugin.json`, `.mcp.json`, `skills/`, and `hooks/` live in the same plugin
-root as their Claude Code counterparts. See [`CODEX.md`](CODEX.md) for the verified behavior,
-remaining desktop checks, and cloud limitation.
+The `.codex-plugin/plugin.json`, `skills/`, and `hooks/` live in the same plugin root as their
+Claude Code counterparts. See [`CODEX.md`](CODEX.md) for the verified behavior, remaining
+desktop checks, and cloud limitation.
 
 ## Tools
 
-### `xmemory` (memory)
+### Memory tools (a per-instance entry)
 
-The connect screen lets you choose exactly which to authorize; the **schema-management** group
-starts unchecked.
+These are the tools an `xmemory-<id8>` entry exposes. With the direct form, the connect screen
+lets you choose exactly which to authorize, and the **schema-management** group starts
+unchecked; the client form grants the default groups.
 
 **Core memory** (granted by default)
 
@@ -225,9 +247,11 @@ starts unchecked.
 | `get_schema_migration` | One migration's detail. |
 | `enhance_schema` | LLM improves a YAML schema from a description (returns YAML, does not apply). |
 
-### `xmemory-admin` (instance management)
+### Admin tools (the optional `xmemory-admin` entry)
 
-Global account/fleet surface — no instance binding. Use it to provision and manage instances.
+Global account/fleet surface — no instance binding. Available once you add the admin entry
+yourself (see [Instance management](#instance-management)); the CLI covers the same operations
+without it.
 
 | Tool | What it does |
 |---|---|

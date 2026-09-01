@@ -78,9 +78,12 @@ a write returns already says what happened.
 
 ## Setup
 
-This skill ships with the xmemory plugin, which registers the remote MCP server at
-`https://mcp.xmemory.ai`. On first use, the client opens a browser to authorize (OAuth) and to
-choose the xmemory instance to connect to. See https://xmemory.ai/mcp for connection help.
+This skill ships with the xmemory plugin. The memory tools arrive through an MCP entry registered
+per instance — the plugin bundles none. `xmemcli instance setup <id>` prints the registration
+commands for this machine, and the plugin's `connect` skill records which instances this project
+uses. An entry that runs `xmemcli mcp <id>` authenticates with the CLI credential; a direct
+`https://mcp.xmemory.ai/instance/<id>` entry opens a browser to authorize on first use. See
+https://xmemory.ai/mcp for connection help.
 
 In Codex, when a `.xmemory.json` binding is in scope but no xmemory context was supplied for the
 session, use the bundled `doctor` skill. If doctor finds hooks disabled or awaiting trust, tell
