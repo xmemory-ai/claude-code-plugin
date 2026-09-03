@@ -5,7 +5,8 @@ This repository is one plugin package with two client entry points:
 - Claude Code reads `.claude-plugin/plugin.json`.
 - Codex reads `.codex-plugin/plugin.json`.
 
-Both clients load the same `.mcp.json` and skills. They also share `hooks/hooks.json`: Codex
+Both clients load the same skills; neither manifest bundles an MCP entry, because connections are
+registered per instance. They also share `hooks/hooks.json`: Codex
 discovers that conventional path automatically when the plugin is enabled, so
 `.codex-plugin/plugin.json` intentionally has no `hooks` entry. Installing the package in one
 client does not create two entries in that client.
@@ -38,11 +39,13 @@ only the text between `<!-- xmemory:managed:start -->` and
 ## Per-instance connections
 
 When `xmemcli` is installed and signed in, register a per-instance server through the local
-transport so the credential is read from the CLI configuration on every connection:
+transport so the credential is read from the CLI configuration on every connection. Name the
+entry `xmemory-<id8>` — `xmemory-` plus the first eight characters of the instance id, the name
+the instance's own setup instructions print — so two paths never register one instance twice:
 
 ```bash
 xmemcli --json status
-codex mcp add xmemory-work -- xmemcli mcp <work-instance-id>
+codex mcp add xmemory-<id8> -- xmemcli mcp <id>
 ```
 
 Read both `version` and `authenticated` in the status output; its exit code does not establish
@@ -53,8 +56,8 @@ registering the server.
 When the CLI is absent or cannot be upgraded, use the browser-authorized direct form instead:
 
 ```bash
-codex mcp add xmemory-work --url "https://mcp.xmemory.ai/instance/<work-instance-id>"
-codex mcp login xmemory-work
+codex mcp add xmemory-<id8> --url "https://mcp.xmemory.ai/instance/<id>"
+codex mcp login xmemory-<id8>
 ```
 
 The shared `connect` skill follows this same order for Claude Code and Codex while showing only

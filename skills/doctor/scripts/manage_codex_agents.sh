@@ -27,9 +27,9 @@ When a `.xmemory.json` binding is in scope and no xmemory context was supplied f
 use the bundled `doctor` skill. If `xmemcli` is available, `xmemcli context --text` loads the
 bound `autoload` context manually.
 
-If doctor finds Codex hooks disabled or awaiting trust, tell the user in one sentence: "Codex
-hooks load bound xmemory context at session lifecycle points; enable them with
-`[features] hooks = true` and review them with `/hooks`, and either change is reversible."
+If doctor finds Codex hooks disabled or awaiting trust, say so in one sentence: "Codex hooks
+load the bound context at session lifecycle points; enable them with `[features] hooks = true`
+and review them with `/hooks` — either change is reversible."
 
 When relying on a recalled xmemory record, cite it by name and include its link when the tool
 returns one.

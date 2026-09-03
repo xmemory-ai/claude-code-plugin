@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "xmemory \u2014 persistent, schema-structured memory",
-    "version": "0.3.2"
+    "version": "0.4.0"
   },
   "plugins": [
     {

@@ -34,9 +34,10 @@ answering questions from what was saved earlier.
 - **`read`** — query the instance in natural language: factual lookups, aggregations,
   listings, and traversals across stored relations. A read that returns nothing is more useful
   than a skipped one, so attempt the read even if the question looks outside the schema.
-- **`write_status`** — diagnostic only. Call once (never poll) if a read that should contain
-  written data comes back unexpectedly empty, or if the user explicitly asks whether a write
-  landed.
+- **`write_status`** — diagnostic only — check once whether a specific async write landed, and how
+  long it took. `queued`, `processing`, `extracting`, `extracted` and `applying` all mean it is
+  still in flight. Reach for it when a read that should contain written data comes
+  back unexpectedly empty, or when the user explicitly asks whether a write landed.
 - **`get_instance_id`**, **`get_instance_schema`** — return the connected instance's ID and its
   object/field/relation schema. Use `get_instance_schema` when you need to know what shapes the
   instance can store before answering a schema question.
@@ -78,12 +79,14 @@ a write returns already says what happened.
 
 ## Setup
 
-This skill ships with the xmemory plugin, which registers the remote MCP server at
-`https://mcp.xmemory.ai`. On first use, the client opens a browser to authorize (OAuth) and to
-choose the xmemory instance to connect to. See https://xmemory.ai/mcp for connection help.
+This skill ships with the xmemory plugin. The memory tools arrive through an MCP entry registered
+per instance — the plugin bundles none. `xmemcli instance setup <id>` prints the registration
+commands for this machine, and the plugin's `connect` skill records which instances this project
+uses. An entry that runs `xmemcli mcp <id>` authenticates with the CLI credential; a direct
+`https://mcp.xmemory.ai/instance/<id>` entry opens a browser to authorize on first use. See
+https://xmemory.ai/mcp for connection help.
 
 In Codex, when a `.xmemory.json` binding is in scope but no xmemory context was supplied for the
-session, use the bundled `doctor` skill. If doctor finds hooks disabled or awaiting trust, tell
-the user in one sentence: "Codex hooks load bound xmemory context at session lifecycle points;
-enable them with `[features] hooks = true` and review them with `/hooks`, and either change is
-reversible."
+session, use the bundled `doctor` skill. If doctor finds hooks disabled or awaiting trust, say so
+in one sentence: "Codex hooks load the bound context at session lifecycle points; enable them
+with `[features] hooks = true` and review them with `/hooks` — either change is reversible."

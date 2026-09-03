@@ -10,13 +10,13 @@ Run these against a scratch directory, never a real project.
 
 ## connect
 
-1. **Discovery, admin authorized.** `/xmemory:connect` in a directory with no
-   `.xmemory.json`. Expect: it lists your instances with names and purposes, and
-   proposes tiers rather than asking cold.
-2. **Discovery, admin *not* authorized.** Revoke the `xmemory-admin` connection and
-   repeat. Expect: it says the connection is not authorized, points at `/mcp`, and
-   offers `xmemcli org list instances --json` as the fallback. It must not invent an
-   instance id, and must not stop without mentioning the fallback.
+1. **Discovery, CLI signed in.** `/xmemory:connect` in a directory with no
+   `.xmemory.json`. Expect: it runs `xmemcli org list instances --json`, lists your
+   instances with names and purposes, and proposes tiers rather than asking cold.
+2. **Discovery, no CLI.** Remove `xmemcli` from `PATH` and repeat. Expect: it uses
+   `admin_list_own_instances` if an `xmemory-admin` entry is registered, and otherwise
+   says how to install the CLI or add that entry and points at the console meanwhile. It
+   must not invent an instance id, and must not stop without naming a way forward.
 3. **Write, CLI present.** Accept a proposal. Expect: `xmemcli binding add` with the
    flags shown, and a `.xmemory.json` at the project root — not in whatever
    subdirectory the session started in.
