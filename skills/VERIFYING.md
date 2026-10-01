@@ -116,8 +116,8 @@ where two throwaway instances are fine.
     against a few chunks (not the corpus), and each miss paired with a proposed schema change
     that goes through `dry-run` and approval before it is applied.
 11. **Existing instance.** Run it again, naming an instance that already holds data. Expect no
-    create: its schema read with `schema get` and shown, each question mapped to where its answer
-    would live, additions proposed only through `dry-run` and approval, the gate worded as a
-    pilot write into that instance, and every overwrite of an existing value called out in the
-    pilot. A key it cannot change leads to an offer of a separate instance, never to replacing
-    the user's.
+    create: its schema read with `schema get` and shown, each question mapped to where its
+    answer would live, additions applied only through `dry-run` and approval, a plain statement
+    that records the docs name are updated in place, the gate worded as a pilot write into that
+    instance, and every value the pilot replaces shown before the bulk write. A key it cannot
+    change leads to an offer of a separate instance, never to replacing yours.

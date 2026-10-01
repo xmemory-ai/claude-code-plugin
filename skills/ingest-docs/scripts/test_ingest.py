@@ -77,7 +77,7 @@ if command == "write":
         out({"queued": True})
     if mode == "unreadable_200":
         out({"error": "the response body is not valid JSON", "status": 200, "stage": "request"}, 3)
-    if mode == "crash":
+    if mode == "unexpected_exit":
         print("Traceback (most recent call last): ...", file=sys.stderr)
         sys.exit(1)
     if mode == "async_502_first" and "--no-wait" in rest and first("bad_gateway"):
@@ -86,6 +86,8 @@ if command == "write":
         out({"error": "every write is queued; a waiting write is not expected", "status": None, "stage": "usage"}, 2)
     if mode == "still_processing":
         out({"write_id": str(uuid.uuid4()), "write_status": "extracting"}, 8)
+    if mode == "network_down":
+        out({"error": "Network error: connection refused", "status": None, "stage": "request"}, 3)
     out({"write_id": str(uuid.uuid4())})
 if command == "write-status":
     write_id = rest[1]
@@ -95,7 +97,7 @@ if command == "write-status":
         out({"write_id": write_id, "write_status": "extracting", "timed_out": True}, 5)
     if mode == "status_not_found":
         out({"write_id": write_id, "write_status": "not_found"})
-    if mode == "slow_status":
+    if mode == "in_progress_status":
         polls = sum(1 for line in open(os.path.join(state, "calls.jsonl")) if "write-status" in json.loads(line))
         if polls <= 6:
             out({"write_id": write_id, "write_status": "extracted", "timed_out": True}, 5)
@@ -351,6 +353,23 @@ class DiscoveryTests(unittest.TestCase):
             self.assertEqual(discovery.skipped_types, {".json": 1, ".yaml (not an API spec)": 1})
             self.assertEqual(discovery.skipped_examples[".yaml (not an API spec)"],
                              ["https://docs.example/reference/spec.yaml"])
+
+    def test_every_skipped_link_is_kept_beyond_the_examples(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            index = Path(tmp, "llms.txt")
+            links = [f"- [Config {n}](https://docs.example/config/{n}.yaml)" for n in ("a", "b", "c")]
+            links.append("- [Spec](https://docs.example/reference/spec.yaml)")
+            index.write_text("## Docs\n- [Guide](https://docs.example/guide.md)\n" + "\n".join(links) + "\n")
+            code, found = run_main(["discover", str(index), "--run", os.path.join(tmp, "run")])
+            self.assertEqual(code, 0)
+            self.assertEqual(len(found["skipped_config_examples"][".yaml (not an API spec)"]), 3)
+            rows = ingest.read_jsonl(Path(found["skipped_file"]))
+            self.assertIn({"location": "https://docs.example/reference/spec.yaml", "kind": ".yaml (not an API spec)"}, rows)
+            self.assertEqual(len(rows), 4)
+            # A later discover with fewer skipped links replaces the list rather than adding to it.
+            index.write_text("## Docs\n- [Guide](https://docs.example/guide.md)\n" + links[0] + "\n")
+            _, found = run_main(["discover", str(index), "--run", os.path.join(tmp, "run")])
+            self.assertEqual(len(ingest.read_jsonl(Path(found["skipped_file"]))), 1)
 
     def test_a_remote_index_cannot_point_at_local_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -684,7 +703,7 @@ class WriteLoopTests(unittest.TestCase):
         self.assertEqual(report["failures"][0]["error"], "text too long")
         self.assertEqual(self.calls("--no-wait"), 1)
 
-    def test_a_slow_pilot_write_is_followed_by_its_id_not_sent_again(self) -> None:
+    def test_a_pilot_write_still_in_flight_is_followed_by_its_id_not_sent_again(self) -> None:
         # The server is still extracting when the wait runs out: the write keeps its id, and the
         # same command later picks it up with its report instead of sending it a second time.
         self.mode("pending")
@@ -751,9 +770,9 @@ class WriteLoopTests(unittest.TestCase):
         self.assertEqual(self.calls("--no-wait"), 4)
 
     def test_a_write_that_failed_in_an_unforeseen_way_is_not_resent(self) -> None:
-        # An accepted write whose 200 could not be read, and a CLI that crashed mid-call, may both
+        # An accepted write whose 200 could not be parsed, and an xmemcli that exited unexpectedly, may both
         # have been stored: only a definite rejection is sent again on a later run.
-        for mode in ("unreadable_200", "crash"):
+        for mode in ("unreadable_200", "unexpected_exit"):
             self.mode(mode)
             code, report = self.write("--chunks", self.first_chunk(), "--force")
             self.assertEqual(report["instances"][INSTANCE]["unknown"], 1, mode)
@@ -861,12 +880,146 @@ class WriteLoopTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(report["instances"][INSTANCE]["completed"], 1)
         statuses = [json.loads(line)["status"] for line in Path(self.run_dir, "state.jsonl").read_text().splitlines()]
-        self.assertEqual(statuses, ["queued", "failed", "queued", "completed"])
+        self.assertEqual(statuses, ["sending", "queued", "failed", "sending", "queued", "completed"])
 
-    def test_a_slow_write_is_polled_until_it_lands(self) -> None:
+    def test_a_run_killed_while_a_write_was_leaving_does_not_send_it_again(self) -> None:
+        # The last row a hard-killed run left for this chunk says it was being sent: it may have
+        # landed, so the next run reports it as unknown instead of sending a second copy.
+        chunk = ingest.read_jsonl(Path(self.run_dir, "manifest.jsonl"))[0]
+        row = {"at": "then", "instance": INSTANCE, "chunk": chunk["id"], "hash": chunk["hash"], "status": "sending"}
+        Path(self.run_dir, "state.jsonl").write_text(json.dumps(row) + "\n")
+        code, report = self.write("--chunks", chunk["id"])
+        self.assertEqual(code, 0)
+        self.assertEqual(report["instances"][INSTANCE]["unknown"], 1)
+        # Held back, but named, so the agent can check that one chunk.
+        self.assertEqual([u["chunk"] for u in report["unknown"]], [chunk["id"]])
+        self.assertIn("may have landed", report["unknown"][0]["error"])
+        self.assertEqual(self.calls("--no-wait"), 0)
+        _, status = run_main(["status", "--run", self.run_dir])
+        self.assertEqual(status["instances"][INSTANCE]["unknown"], 1)
+        code, report = self.write("--chunks", chunk["id"], "--resend-unknown")
+        self.assertEqual(report["instances"][INSTANCE]["completed"], 1)
+        self.assertEqual(self.calls("--no-wait"), 1)
+
+    def test_an_unknown_chunk_found_stored_can_be_marked_written(self) -> None:
+        chunks = ingest.read_jsonl(Path(self.run_dir, "manifest.jsonl"))
+        unknown = {"at": "then", "instance": INSTANCE, "chunk": chunks[0]["id"], "hash": chunks[0]["hash"], "status": "sending"}
+        Path(self.run_dir, "state.jsonl").write_text(json.dumps(unknown) + "\n")
+        code, refused = run_main(["write", "--run", self.run_dir, "--instance", INSTANCE, "--all", "--mark-stored"])
+        self.assertEqual(code, 2)
+        self.assertIn("--mark-stored needs --chunks", refused["error"])
+        # It sends nothing, so it works without xmemcli at hand.
+        code, marked = run_main(["write", "--run", self.run_dir, "--xmemcli", "no-such-xmemcli", "--instance", INSTANCE,
+                                 "--chunks", f"{chunks[0]['id']},{chunks[1]['id']}", "--mark-stored"])
+        self.assertEqual(code, 0)
+        self.assertEqual([m["chunk"] for m in marked["marked_stored"]], [chunks[0]["id"]])
+        self.assertEqual(marked["not_unknown"][0]["status"], "not_written")
+        self.assertEqual(self.calls("--no-wait"), 0)
+        # Now it counts as written: neither a rerun nor --resend-unknown sends it again.
+        code, report = self.write("--all", "--resend-unknown")
+        self.assertEqual(report["instances"][INSTANCE]["already_written"], 1)
+        self.assertEqual(self.calls("--no-wait"), len(chunks) - 1)
+
+    def test_mark_stored_touches_only_the_instance_where_the_chunk_is_unknown(self) -> None:
+        chunk = ingest.read_jsonl(Path(self.run_dir, "manifest.jsonl"))[0]
+        rows = [
+            {"at": "then", "instance": INSTANCE, "chunk": chunk["id"], "hash": chunk["hash"], "status": "unknown",
+             "error": "it may have landed - connection reset"},
+            {"at": "then", "instance": OTHER, "chunk": chunk["id"], "hash": chunk["hash"], "status": "completed", "write_id": "w"},
+        ]
+        Path(self.run_dir, "state.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+        # The held chunk is listed with the reason its own log row gave.
+        code, report = self.write("--chunks", chunk["id"])
+        self.assertEqual(report["unknown"], [{"chunk": chunk["id"], "instance": INSTANCE, "error": "it may have landed - connection reset"}])
+        # A check confirms one instance at a time: naming two is refused, so the other is never marked unseen.
+        code, refused = run_main(["write", "--run", self.run_dir, "--instance", INSTANCE, "--instance", OTHER,
+                                  "--chunks", chunk["id"], "--mark-stored"])
+        self.assertEqual(code, 2)
+        self.assertIn("takes one --instance", refused["error"])
+        code, marked = run_main(["write", "--run", self.run_dir, "--instance", INSTANCE, "--chunks", chunk["id"], "--mark-stored"])
+        self.assertEqual(marked["marked_stored"], [{"chunk": chunk["id"], "instance": INSTANCE}])
+        code, marked = run_main(["write", "--run", self.run_dir, "--instance", OTHER, "--chunks", chunk["id"], "--mark-stored"])
+        self.assertEqual(marked["not_unknown"], [{"chunk": chunk["id"], "instance": OTHER, "status": "completed"}])
+
+    def test_a_lost_connection_stops_the_run_instead_of_leaving_every_chunk_unknown(self) -> None:
+        self.mode("network_down")
+        code, report = self.write("--all")
+        self.assertEqual(code, 3)  # a stopped run, as for an exhausted quota
+        self.assertIn("could not be reached", report["stopped"])
+        self.assertEqual(report["instances"][INSTANCE]["unknown"], 1)
+        self.assertEqual(report["instances"][INSTANCE]["not_attempted"], 2)
+        self.assertEqual(self.calls("--no-wait"), 1)
+        # Once it is back, the same command sends the rest and holds the one in doubt for a check.
+        self.mode("ok")
+        code, report = self.write("--all")
+        self.assertEqual(report["instances"][INSTANCE]["completed"], 2)
+        self.assertEqual(report["instances"][INSTANCE]["unknown"], 1)
+
+    def test_a_send_that_was_refused_leaves_the_chunk_as_it_was(self) -> None:
+        run = ingest.Run(self.run_dir)
+        rows = [
+            {"instance": INSTANCE, "chunk": "c1", "hash": "A", "status": "completed", "write_id": "w1"},
+            {"instance": INSTANCE, "chunk": "c1", "hash": "B", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c1", "hash": "B", "status": "not_sent"},
+            {"instance": INSTANCE, "chunk": "c2", "hash": "A", "status": "completed", "write_id": "w2"},
+            {"instance": INSTANCE, "chunk": "c2", "hash": "B", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c2", "hash": "B", "status": "failed", "error": "HTTP 400"},
+            {"instance": INSTANCE, "chunk": "c3", "hash": "A", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c3", "hash": "A", "status": "not_sent"},
+            # A forced rewrite of the stored version, refused as it was sent.
+            {"instance": INSTANCE, "chunk": "c4", "hash": "A", "status": "completed", "write_id": "w4"},
+            {"instance": INSTANCE, "chunk": "c4", "hash": "A", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c4", "hash": "A", "status": "failed", "error": "HTTP 400"},
+            # A forced rewrite of the stored version, accepted and then failed on the server.
+            {"instance": INSTANCE, "chunk": "c5", "hash": "A", "status": "completed", "write_id": "w5"},
+            {"instance": INSTANCE, "chunk": "c5", "hash": "A", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c5", "hash": "A", "status": "queued", "write_id": "w6"},
+            {"instance": INSTANCE, "chunk": "c5", "hash": "A", "status": "failed", "write_id": "w6", "error": "x"},
+            # A first version refused: it was never stored, so it is due again.
+            {"instance": INSTANCE, "chunk": "c6", "hash": "A", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c6", "hash": "A", "status": "failed", "error": "HTTP 400"},
+            # A stored, then B may have landed (unknown, in flight, or no answer at all), then the
+            # section changed back to A and A failed: the instance may hold B, so A is due again.
+            {"instance": INSTANCE, "chunk": "c7", "hash": "A", "status": "completed", "write_id": "w7"},
+            {"instance": INSTANCE, "chunk": "c7", "hash": "B", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c7", "hash": "B", "status": "unknown", "error": "x"},
+            {"instance": INSTANCE, "chunk": "c7", "hash": "A", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c7", "hash": "A", "status": "queued", "write_id": "w8"},
+            {"instance": INSTANCE, "chunk": "c7", "hash": "A", "status": "failed", "write_id": "w8", "error": "x"},
+            {"instance": INSTANCE, "chunk": "c8", "hash": "A", "status": "completed", "write_id": "w9"},
+            {"instance": INSTANCE, "chunk": "c8", "hash": "B", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c8", "hash": "B", "status": "pending", "write_id": "w10"},
+            {"instance": INSTANCE, "chunk": "c8", "hash": "A", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c8", "hash": "A", "status": "queued", "write_id": "w11"},
+            {"instance": INSTANCE, "chunk": "c8", "hash": "A", "status": "failed", "write_id": "w11", "error": "x"},
+            {"instance": INSTANCE, "chunk": "c9", "hash": "A", "status": "completed", "write_id": "w12"},
+            {"instance": INSTANCE, "chunk": "c9", "hash": "B", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c9", "hash": "A", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c9", "hash": "A", "status": "queued", "write_id": "w13"},
+            {"instance": INSTANCE, "chunk": "c9", "hash": "A", "status": "failed", "write_id": "w13", "error": "x"},
+            # B refused for certain, then a forced A refused: A is still what the instance holds.
+            {"instance": INSTANCE, "chunk": "c10", "hash": "A", "status": "completed", "write_id": "w14"},
+            {"instance": INSTANCE, "chunk": "c10", "hash": "B", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c10", "hash": "B", "status": "failed", "error": "HTTP 400"},
+            {"instance": INSTANCE, "chunk": "c10", "hash": "A", "status": "sending"},
+            {"instance": INSTANCE, "chunk": "c10", "hash": "A", "status": "failed", "error": "HTTP 400"},
+        ]
+        Path(self.run_dir, "state.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+        latest = ingest.state_by_instance(run)[INSTANCE]
+        self.assertEqual((latest["c1"]["hash"], latest["c1"]["status"]), ("A", "completed"))
+        self.assertEqual((latest["c2"]["hash"], latest["c2"]["status"]), ("A", "completed"))
+        self.assertNotIn("c3", latest)
+        self.assertEqual((latest["c4"]["status"], latest["c4"]["write_id"]), ("completed", "w4"))
+        self.assertEqual((latest["c5"]["status"], latest["c5"]["write_id"]), ("completed", "w5"))
+        self.assertEqual(latest["c6"]["status"], "failed")
+        for chunk in ("c7", "c8", "c9"):
+            self.assertEqual((latest[chunk]["hash"], latest[chunk]["status"]), ("A", "failed"), chunk)
+        self.assertEqual((latest["c10"]["status"], latest["c10"]["write_id"]), ("completed", "w14"))
+
+    def test_a_write_in_progress_is_polled_until_it_lands(self) -> None:
         # The CLI answers exit 5 with the write's state while it is still in flight; more such
         # answers than the error budget must not give up on the write.
-        self.mode("slow_status")
+        self.mode("in_progress_status")
         code, report = self.write("--chunks", self.first_chunk())
         self.assertEqual(code, 0)
         self.assertEqual(report["instances"][INSTANCE]["completed"], 1)
@@ -890,7 +1043,7 @@ class WriteLoopTests(unittest.TestCase):
         # A field filled on an earlier record is shown, but is not an overwrite.
         self.assertIn("CliCommand[command='read'].usage: (empty) -> \"xmemcli read\"", pilot["objects"])
         self.assertIn("CliCommand(purpose=\"no key here\")", pilot["objects"])
-        self.assertEqual(pilot["extracted"], ["CliCommand(command='write')", "CliCommand", "CliCommand(command='read')"])
+        self.assertEqual(pilot["changed_records"], ["CliCommand(command='write')", "CliCommand", "CliCommand(command='read')"])
         # The pilot write was queued like any other (the fake refuses a waiting write) and its
         # report read back from its status.
         self.assertEqual(self.calls("--no-wait"), 1)
@@ -899,12 +1052,22 @@ class WriteLoopTests(unittest.TestCase):
         self.assertEqual(pilot["server_notes"], {"overwritten_field_values": 1})
         self.assertEqual(pilot["tokens"], 30.0)
         self.assertIn(INSTANCE, report["token_estimate"])
+        self.assertEqual(report["token_estimate"][INSTANCE]["based_on_chunks"], 1)
         saved = json.loads(Path(pilot["file"]).read_text())
         self.assertEqual(saved["overwrote_existing"][0]["old"], "old text")
         # Nothing but the token count is read from the trace.
         self.assertEqual(self.calls("trace"), 1)
 
-    def test_the_pilot_waits_for_a_trace_the_console_has_not_recorded_yet(self) -> None:
+    def test_a_pilot_rewrite_keeps_the_earlier_rounds_file(self) -> None:
+        chunk = self.first_chunk()
+        self.write("--chunks", chunk, "--sync")
+        self.write("--chunks", chunk, "--sync", "--force")
+        files = sorted(Path(self.run_dir, "pilot").glob(f"{chunk}__*.json"))
+        self.assertEqual(len(files), 2)
+        ids = {json.loads(path.read_text())["write_id"] for path in files}
+        self.assertEqual(len(ids), 2)
+
+    def test_the_pilot_asks_again_for_a_trace_not_yet_available(self) -> None:
         self.mode("trace_late")
         code, report = self.write("--chunks", self.first_chunk(), "--sync")
         self.assertEqual(code, 0)

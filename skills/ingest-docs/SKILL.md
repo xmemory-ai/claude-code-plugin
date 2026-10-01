@@ -50,15 +50,16 @@ an HTML page then fails with a message saying to run it with `uv run`.
 
 Every command prints one JSON document on stdout and progress lines on stderr. Everything a run
 produces — fetched pages, chunks, the manifest, the write log — lives in its **run directory**.
-Use `xmemory-ingest/<short-name>` under the working directory; in a git repository, offer to add
-`xmemory-ingest/` to `.gitignore`. Rerunning any command resumes from what the directory holds.
+Use `xmemory-ingest/<short-name>` under the working directory; in a git repository, add the
+line `xmemory-ingest/` to the local exclude file, `$(git rev-parse --git-path info/exclude)`,
+unless it is already there: a local ignore that is never committed, so nothing a run saves is. Rerunning any command resumes from what the directory holds.
 
 | Command | What it does |
 |---|---|
 | `discover SOURCE... --run DIR` | Lists the pages a source offers, grouped; sends nothing to xmemory |
 | `prepare --run DIR` | Fetches the pages in scope, converts them to Markdown, splits them into chunks, writes `manifest.jsonl` |
 | `sample --run DIR --questions FILE` | Picks the chunks that best match each question |
-| `write --run DIR --instance ID... (--chunks IDS \| --all) [--sync]` | Writes chunks to every listed instance through xmemcli; `--sync` waits for each write and reports what it stored (the pilot, and any rewrite you want to inspect) |
+| `write --run DIR --instance ID... (--chunks IDS \| --all) [--sync]` | Writes chunks to every listed instance through xmemcli; `--sync` waits for each write and reports what it stored (the pilot, and any rewrite you want to inspect); `--force`, `--resend-unknown` and `--mark-stored` are explained where they are used |
 | `status --run DIR` | What has been written, per instance |
 | `ask --run DIR --instance ID... --questions FILE` | Runs the questions through `xmemcli read` |
 
@@ -66,7 +67,7 @@ Use `xmemory-ingest/<short-name>` under the working directory; in a git reposito
 
 Each chunk is a file in `<run>/chunks/`, named by its chunk id plus `.md` — the id that
 `--chunks` takes. To find the chunks that mention something, search for a literal term:
-`grep -rlF '<term>' <run>/chunks` (in PowerShell,
+`grep -rlF -- '<term>' <run>/chunks` (the `--` lets a term like `--force` through; in PowerShell,
 `Select-String -Path <run>\chunks\* -SimpleMatch -List '<term>' | Select-Object Path`). Read at
 most three of the matches; when many match, narrow the term rather than reading more.
 
@@ -77,19 +78,18 @@ save the list, and search it locally:
 
 ```bash
 xmemcli --json --instance-id <id> read --read-mode raw "List every <Type> with all its fields" > <run>/check-<Type>.json
-grep -F '<part of the value>' <run>/check-<Type>.json
+grep -F -- '<part of the value>' <run>/check-<Type>.json
 ```
 
 (In PowerShell, `Select-String -Path <run>\check-<Type>.json -SimpleMatch '<part of the value>'`.)
 The saved JSON escapes accented letters, quotes and backslashes, so search for a plain ASCII
 part of the value without them.
 
-Ask for the whole type rather than putting a condition in the question: a condition worded in
-the question can match less than meant, so an empty answer to it proves nothing. A full listing
-without the value counts as not stored; for a type with very many records, where the listing
-may not hold them all, a miss is inconclusive. When the question is whether one chunk's write
-landed, search for a value only that chunk states; a record other chunks also produce proves
-nothing.
+Ask for the whole type and search the saved listing: a direct check that does not depend on
+how a condition in the question is worded. A full listing without the value counts as not
+stored; for a type with very many records, confirm the listing covers them all before treating a
+miss as final. When the question is whether one chunk's write landed, search for a value only
+that chunk states; a record other chunks also produce does not show it.
 
 ## 1. Preflight
 
@@ -129,8 +129,9 @@ Ask for three things, **one per message**:
 
 1. **Where the docs go** — new instances built for them (the default, steps 4–6), or an instance
    the user already has. If they already have one, list their instances with
-   `xmemcli --json org list instances` and let them pick; then follow
-   [Into an existing instance](#into-an-existing-instance) in place of steps 4 and 5.
+   `xmemcli --json org list instances` and let them pick (from a long list, ask for the name and
+   match it); then follow
+   [Into an existing instance](#into-an-existing-instance) in place of step 4.
 2. **The question list** — 20 to 30 questions the user will actually ask, pasted or as a file.
    Save them one per line to `<run>/questions.txt`. Fewer than ten is fine; say the schema will
    only be as wide as the questions.
@@ -157,7 +158,8 @@ later `discover` without those flags keeps it, and `--reset-scope` clears it.
 ### Other document formats
 
 `discover` lists what it could not take under `skipped_documents`, by file type, with a few
-paths per type under `skipped_examples`. Nothing there is lost silently: tell the user what was
+paths per type under `skipped_examples`; `skipped_file` holds every skipped path with its type.
+Nothing there is lost silently: tell the user what was
 left out and offer to convert it to Markdown files in `<run>/converted/`, then pass that folder
 to `discover` as one more source.
 Convert with a tool or a small script — never by reading the files into your context:
@@ -166,7 +168,7 @@ Convert with a tool or a small script — never by reading the files into your c
 |---|---|
 | PDF | `pdftotext <file>.pdf <run>/converted/<name>.md` (poppler). A scanned PDF has no text to extract: it needs OCR first (`ocrmypdf`), so say so. |
 | Word (`.docx`), PowerPoint (`.pptx`), OpenDocument, RTF, EPUB, reStructuredText, AsciiDoc, LaTeX, Org, Jupyter notebooks | `pandoc <file> -t gfm -o <run>/converted/<name>.md` — a recent pandoc; older releases cannot read PowerPoint or AsciiDoc. The old binary `.doc` / `.ppt` need saving as `.docx` / `.pptx` first (`soffice --headless --convert-to docx --outdir <run>/converted <file>`). |
-| OpenAPI / Swagger specs (`.yaml`, `.json`) | A short script that writes one Markdown section per operation — method and path as the heading, then summary, parameters and responses — so every endpoint becomes its own chunk. A local file is listed when it opens as a spec, a linked one when its file name says so (`openapi.json`, `swagger.yaml`, `api-docs.json`). Other JSON and YAML is counted as site configuration under `skipped_other`, with a few names under `skipped_config_examples`: glance at them in case a spec goes by another name. |
+| OpenAPI / Swagger specs (`.yaml`, `.json`) | A short script that writes one Markdown section per operation — method and path as the heading, then summary, parameters and responses — so every endpoint becomes its own chunk. A local file is listed when it opens as a spec, a linked one when its file name says so (`openapi.json`, `swagger.yaml`, `api-docs.json`). Other JSON and YAML is counted as site configuration under `skipped_other`, with a few names under `skipped_config_examples` and all of them in `skipped_file`: glance at them in case a spec goes by another name. |
 | Spreadsheets, CSV | Ask first: a sheet of reference values can become Markdown tables through a short script; a data export is not documentation. |
 
 A missing tool is the user's to install (`brew install poppler pandoc`, or the system's package
@@ -233,9 +235,10 @@ Write one XMD file per instance, `<run>/<instance-slug>.xmd.yml`:
   paragraph.
 - For the broad instance, model the subjects the descriptive questions ask about — features,
   procedures, concepts — with text fields that keep the explanation.
-- **Provenance is optional but cheap.** Offer a `SourcePage` object keyed on `url` (every chunk
-  carries its `Source:` line, so this key is always present) with a relation to the extracted
-  records, so answers can name their page. Skip it when it would bloat a small schema.
+- **Provenance is optional but cheap.** Decide on a `SourcePage` object keyed on `url` (every
+  chunk carries its `Source:` line, so this key is always present) with a relation to the
+  extracted records, so answers can name their page; leave it out when it would bloat a small
+  schema. The schema table shows the choice, so the user can change it at the gate.
 
 ### Keys: settle them in the pilot
 
@@ -260,6 +263,13 @@ Validate each file until it passes (exit 0; a pass prints the schema back, norma
 xmemcli xmd validate <run>/<instance-slug>.xmd.yml
 ```
 
+When the account sees more than one cluster, `xmd validate` and `instance create` say so. Pick
+the cluster yourself: for an instance that already exists, pass `--instance-id <id>` before the
+command; for a new one, take the cluster the user's other instances are on, else the one named
+`Default` (`xmemcli --json org list clusters` lists them), set `XMEM_CLUSTER_ID=<its id>` for
+both commands, and say which one you used. Ask only when neither settles it — their instances
+spread over several clusters and none is named `Default`.
+
 Show each instance as a table — objects, their fields (type, required, allowed values), keys,
 relations, and whether `SourcePage` is in — not raw YAML unless asked.
 
@@ -275,30 +285,30 @@ sections — *Create and pilot* / *Change something*.
 
 ### Into an existing instance
 
-When the docs go into an instance the user already has, its schema is the starting point and
-its data is the user's: nothing here may cost them what is already stored.
+When the docs go into an instance the user already has — one they prepared for them, one that
+already holds other docs, or one with their own records — its schema is the starting point: it
+is extended, never replaced. Follow these items in place of step 4; step 5's guidance — the XMD
+guide, `sample`, the five chunks, keys — applies to what you add.
 
 1. Read the schema: `xmemcli --json schema get <id>`. Show it as a table (objects, fields, keys,
    relations), then map every question to the object and field that would hold its answer, and
-   list the questions with no place in it.
-2. For questions with no place, propose additions — new fields, objects or relations, with
-   descriptions that mention the `Page:` / `Section:` breadcrumb. Apply them only through
-   `xmemcli xmd validate`, `xmemcli schema dry-run` and the user's approval, then
-   `xmemcli schema update`; never replace the schema. Leave the existing keys alone unless the
-   user asks, and change one only if the dry-run finds no colliding records. When most questions
-   have no place, say so and offer new instances for the docs (steps 4–6) instead of reshaping
-   theirs.
-3. Say plainly what writing docs here does: records the docs mention are updated in place, which
-   can overwrite values the user entered themselves, and unkeyed objects gain new records beside
-   the ones already there.
-4. Pick the pilot as above. **Gate 1** becomes: "Write these <N> pilot sections to <name>?" —
-   *Write the pilot* / *Change something*.
+   list the questions with no place in it. When most questions have no place, say so and offer
+   new instances for the docs (steps 4–6) instead of reshaping theirs.
+2. For questions with no place, write additions — new fields, objects or relations, with
+   descriptions that mention the `Page:` / `Section:` breadcrumb. Start from
+   `xmemcli schema get <id> -o <file>`, edit that file, `xmemcli xmd validate` it, then
+   `xmemcli schema dry-run <id> --schema-file <file>`, show the preview, and on approval
+   `xmemcli schema update <id> --schema-file <file>`. Leave the existing keys alone unless the
+   user asks, and change one only if the dry-run finds no colliding records.
+3. Say plainly what writing docs here does, as their schema defines it: records the docs name
+   are updated in place, values already there included, and new records are added.
+4. Pick the pilot as above, grouping the questions by shape as step 4 does. **Gate 1** becomes:
+   "Write these <N> pilot sections to <name>?" — *Write the pilot* / *Change something*.
 
-Then run step 6 without the create. In the pilot, every `overwrote … value(s)` warning now needs
-the user's eye: an old value that came from their own data is one the docs would replace. If the
-pilot shows the docs landing in records they should not, or a key must change and the dry-run
-refuses it, do not create a replacement for their instance — offer a separate instance for the
-docs and let the user decide.
+Then run step 6 without the create. Its `overwrote … value(s)` warnings show which values
+already in the instance the docs replace; show them, so the user sees it before the bulk write.
+A fix goes into their schema as in item 2. If a key must change and the dry-run refuses it, do
+not replace their instance — offer a separate instance for the docs and let the user decide.
 
 ## 6. Create and pilot
 
@@ -306,11 +316,10 @@ docs and let the user decide.
 xmemcli --json instance create --name "<Name>" --description "<one line>" --schema-file <run>/<instance-slug>.xmd.yml
 ```
 
-Keep each returned instance id. The CLI picks the cluster when there is exactly one; when the
-create reports more than one, list them with `xmemcli --json org list clusters`, ask the user
-which one by name, and rerun the create the way the CLI's message says. On an instance-limit
-error, say the plan's limit is reached, point at the Console, and stop — never delete anything
-to make room.
+Keep each returned instance id. The CLI picks the cluster when there is exactly one; with more
+than one, use the cluster chosen at validation (step 5). On an instance-limit error,
+say the plan's limit is reached, point at the Console, and stop — never delete anything to make
+room.
 
 Then write the pilot chunks for real to every chosen instance, waiting for each:
 
@@ -318,27 +327,30 @@ Then write the pilot chunks for real to every chosen instance, waiting for each:
 uv run <ingest> write --run <run> --instance <id> [--instance <id2>] --chunks <chunk_ids from sample> --sync
 ```
 
-These are real writes into a fresh instance; they count as done, and the bulk write skips them.
+These are real writes into the instance; they count as done, and the bulk write skips them.
 The report shows, per chunk and instance, what each write stored — records created with their
 field values, fields it changed or filled on earlier records (old → new, `(empty)` → new) — plus
-warnings, the tokens the write used, and a Console link; `pilot/*.json` holds the full record.
+warnings, the tokens the write used, and a Console link; `pilot/*.json` holds the full record,
+one file per write (the chunk id and the write id are in its name), so earlier rounds stay.
 A chunk lists up to 15 records; `more_objects` counts the rest, so when a record you expected is
 not listed, look in that chunk's `pilot/*.json` file. Show each chunk's section and first dozen
 lines (read those pilot chunk files only) next to what came out of it, then the `token_estimate`
-projection for the whole corpus.
+projection for the whole corpus. It is projected from this command's writes that report tokens
+(`based_on_chunks` counts them), so take it from the full pilot; a rewrite of one or two chunks
+projects roughly at best.
 
 Check, and say what you see:
 
-- Does each question group's information come out as fields? An empty extraction from a chunk
-  that clearly holds the answer means a description is too narrow — with two exceptions. A
-  record with `report_error` landed but its report could not be read: look at that write in the
-  Console instead. And a rewrite (`--force`) reports only what it changed, so an empty report
-  there can mean the records were already exactly as extracted.
+- Does each question group's information come out as fields? The report lists what each write
+  changed (`changed_records`), not everything it extracted: a record extracted exactly as an
+  earlier chunk or round already stored it is not listed. So an empty report from a chunk that
+  clearly holds the answer is inconclusive — [check what is stored](#checking-what-is-stored)
+  for that answer; only when it is missing is a description too narrow. A record with
+  `report_error` landed but its report could not be read: look at that write in the Console.
 - **`came out without its key`** — a keyed object was extracted without its key value, so it
   would be matched with others like it. Fix the key or the description that should fill it.
 - **`merged_field_conflicts`** — the server merged records whose values disagree: the key may be
-  too coarse. **`skipped_candidates`** — records were extracted but not stored; the pilot file
-  says which and why. Other `server_notes` buckets are counts for information.
+  too coarse. Other `server_notes` buckets are counts for information.
 - **`overwrote … value(s)`** — a write changed a record an earlier chunk wrote, and the warning
   names the fields. Fine when it is the same thing described again (a page title refined, a
   purpose reworded); a sign the key is too coarse when two different things now share one record.
@@ -348,7 +360,12 @@ Check, and say what you see:
 - **`deleted`** — unexpected when loading documentation; find the description that
   made it.
 
-Fixing it: edit the XMD and `xmemcli xmd validate` it. Then there are two ways to apply it:
+Fixing it: edit the XMD and `xmemcli xmd validate` it. A stray record the pilot stored (a thing
+the docs only mention in passing, say) can be removed by a structured write, as under
+**Stored wrong** in [Verify](#8-verify), once the description that produced it is fixed —
+only a record the pilot created (its pilot files list them under `objects` and, for unkeyed
+types, `server_notes` → `created_keyless_objects`). Then
+there are two ways to apply a schema fix:
 
 - **Update in place** — `xmemcli schema dry-run <id> --schema-file <file>`, show the preview,
   and on approval `xmemcli schema update <id> --schema-file <file>`; then write the pilot chunks
@@ -372,9 +389,9 @@ Repeat until the user is satisfied. A pilot write the server has not finished wh
 out is `pending`: rerun the command later without `--force`, and it collects the write and its
 report without sending it again. With `--force`, it waits for that write to finish and then
 sends the chunk again, so a rewrite never overlaps an earlier copy and its report is the
-rewrite's own. A write reported `unknown` may have been queued without its id coming back; no
-later run sends it on its own. [Check whether it landed](#checking-what-is-stored), and write it
-again with `--force` only if not.
+rewrite's own. A write reported `unknown` may have landed; the report names its chunk, and no
+later run sends it on its own. [Check whether it landed](#checking-what-is-stored), then handle it
+as under **`unknown`** in [step 7](#7-bulk-write).
 
 If the pilot shows no token figures and a `tokens_error` about a Console origin (an API other than
 `https://api.xmemory.ai`), set `XMEM_CONSOLE_URL` to the Console paired with that API and rerun;
@@ -389,17 +406,20 @@ everything else in the report does not depend on it.
   `xmemcli --json --instance-id <id> quota` lists usage and limit per window when the plan sets
   them; when it lists nothing or reports an error, ask the user to check the plan in the
   Console. A run that hits a quota stops cleanly and resumes later;
-- the time it may take: four writes in flight, each taking seconds to tens of seconds.
+- the time it may take: the first full pilot's `seconds` divided by its chunks, times the chunks
+  left, is a rough guide (both run four writes at a time, and the pilot also builds its
+  reports, so it errs long); say that an interrupted run resumes where it stopped.
 
 ```bash
 uv run <ingest> write --run <run> --instance <id> [--instance <id2>] --all
 ```
 
-Every chunk goes to every chosen instance; each schema keeps what it describes. This can run for
-a long time: run it as a background task if the client supports one and check its progress lines
+Every chunk goes to every chosen instance; each schema keeps what it describes. A large corpus
+takes a while: run it as a background task if the client supports one and check its progress lines
 now and then; otherwise give it a long timeout. An interrupted run sends nothing more; writes
 already sent finish on the server, and the same command picks them up without sending them
-again. Only one `write` or `prepare` runs per run directory at a time.
+again. That includes a background task the client stopped at a time limit, with no report:
+run the same command again. Only one `write` or `prepare` runs per run directory at a time.
 
 When it ends, report per instance: `completed`, `already_written`, `failed`, `pending`,
 `unknown`, `not_attempted`, and `stopped` if set. The bulk write does not count tokens per write;
@@ -407,6 +427,9 @@ the Console shows what the run used.
 
 - **Quota** (`stopped: quota exhausted…`) — say which limit; the same command resumes after the
   reset or a plan change.
+- **Unreachable** (`stopped: xmemory could not be reached…`) — run the same command again once
+  it answers; the write that was leaving when it stopped comes back as `unknown`, settled as
+  below.
 - **`failed`** — list the chunk ids and errors; the same command retries them. A write that keeps
   failing with the same error needs a look at that one chunk.
 - **`pending`** — still processing when the wait ran out; the same command checks them again
@@ -415,11 +438,17 @@ the Console shows what the run used.
   before the answer arrived), or the write is too old for its status to be looked up. It may
   already be stored, so it is not sent again on its own. (`failed` means it was certainly not
   stored.)
-  Tell the user which (the report lists them), and
-  [check whether each landed](#checking-what-is-stored). Once they accept that a resend may
-  store one twice,
-  `write --chunks <ids> --resend-unknown` sends just those (with `--all` instead, every other
-  chunk still due goes too).
+  The report lists each under `unknown` with its chunk and reason, including those held back
+  from earlier runs. [Check whether each landed](#checking-what-is-stored), and settle it:
+  - **found** → `write --chunks <ids> --instance <id> --mark-stored`, naming the one instance
+    the check covered; it sends nothing and stops the chunk coming up again;
+  - **clearly not found** in a full listing → check once more after the `--status-timeout` wait
+    has passed (a write that left late can still land), then send it with
+    `write --chunks <ids> --resend-unknown`;
+  - **the check cannot settle it** (a listing that may be incomplete) → ask the user, saying a
+    resend may store it twice.
+
+  Tell the user what was found and done for each.
 
 `uv run <ingest> status --run <run>` shows where every instance stands, counting `outdated`
 chunks: an earlier version of them was written, the current one not yet.
@@ -445,14 +474,16 @@ the type that should hold it.
 - **Not stored** — either the schema has no place for it (a new field or object) or a
   description needs to say more precisely what to pick up.
 - **Stored wrong** — a keyed record holds a wrong value, or a record should not be there at all.
-  A rewrite cannot remove a record or empty a field, and may extract the same wrong value again.
-  Correct it with a structured write, which changes exactly the record named and extracts
-  nothing. To set a field, write a file holding
+  A rewrite does not remove records or clear fields, and extracts by the same descriptions as
+  before. Correct it with a structured write, which changes exactly the record named and
+  extracts nothing. To set a field, write a file holding
   `[{"object_mutation": {"object_type": "<Type>", "update": {"key": {"<key field>": "<value>"},
   "values": {"<field>": "<correct value>"}}}}]` and run
   `xmemcli --json --instance-id <id> write --mutations-file <file>`. To remove one record, run
-  `xmemcli --json --instance-id <id> write --delete '<Type>:<key field>=<value>'`; a record of
-  an unkeyed type is named by its id instead, `'<Type>:<xuid>'`. Always pass `--instance-id`.
+  `xmemcli --json --instance-id <id> write --delete '<Type>:<key field>=<value>'` (a composite
+  key as `'<Type>:<field>=<value>,<field>=<value>'`; a value with a comma in it needs a `delete`
+  entry, `{"key": {...}}`, in a mutations file instead); a record of an unkeyed type is named by
+  its id instead, `'<Type>:<xuid>'`. Always pass `--instance-id`.
   Show the exact change and get the user's approval first, and fix the description that led to
   it, so a later rewrite does not bring it back.
 
@@ -462,9 +493,9 @@ key can only be tightened now if the dry-run finds no colliding records. A schem
 re-extract what is already written: rewrite the chunks that matter — [search the
 chunks](#searching-the-chunks) for a term from the answer or from the wrong record, then
 `write --chunks <ids> --force`, adding
-`--sync` to see what each rewrite changed — or everything with `--all --force` at full cost; ask
-which. As in the pilot, a rewrite does not take back what the earlier version stored: unkeyed
-records may now appear twice.
+`--sync` to see what each rewrite changed. Rewrite everything with `--all --force`, at full
+cost, only if the user asks. As in the pilot, a rewrite does not take back what the earlier
+version stored: unkeyed records may now appear twice.
 
 ## Finish
 
