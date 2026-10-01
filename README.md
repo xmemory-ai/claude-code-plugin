@@ -129,6 +129,7 @@ the instance context that arrives with the MCP connection — works without it.
 | **`connect`** skill | Discovers your instances and writes the `.xmemory.json` binding |
 | **`doctor`** skill | Reports which parts of the setup work, and what to do about the rest |
 | **`xmemory-memory`** skill | Describes when to reach for the memory tools |
+| **`ingest-docs`** skill | Loads a documentation corpus into instances: a schema from your questions, a pilot, then a resumable bulk write — see [Ingesting documentation](#ingesting-documentation) |
 | **SessionStart** hook | Injects the context of instances bound `autoload` |
 | **PreCompact** hook | Reminds the agent to persist durable facts before context is summarized away |
 | Codex `AGENTS.md` manager | Adds, checks, or removes the marked global fallback block |
@@ -159,6 +160,26 @@ arbitrary schema — a grocery list and a CRM share nothing. The agent decides w
 and writes it through the memory tools it already has. Nothing is sent anywhere by the hook
 itself.
 
+### Ingesting documentation
+
+Ask the agent to "load these docs into xmemory" (or run `/xmemory:ingest-docs`) and give it two
+things: the questions you will ask, and the documentation — a site, an `llms.txt` or
+`llms-full.txt`, a sitemap, page URLs, or a folder of Markdown or HTML. The docs go into new
+instances whose schema is written from the questions, because xmemory keeps only what its schema
+describes — or into an instance you already have, after its schema is checked against the
+questions and extended where they need it. A pilot writes a handful of
+sections and shows what came out of each before anything else is sent; then every section is
+written in batches. Nothing is created or written without your go-ahead.
+
+The heavy lifting is a bundled script, `skills/ingest-docs/scripts/ingest.py`: it fetches the
+pages, splits them by section into chunks that name their page and source, writes them through
+`xmemcli`, and keeps a log so a rerun skips what already landed and a changed section is written
+again. It runs with `uv`, which installs its pinned HTML parser libraries (BeautifulSoup, lxml and
+markdownify, locked with hashes in `ingest.py.lock`) on first use; without `uv`, plain Python 3.9
+or newer handles Markdown sources. `xmemcli` 1.5.1 or newer must be installed and
+signed in, or given a key through `XMEM_API_KEY`. Each run keeps its files in a run directory (`xmemory-ingest/<name>` by default)
+under the working directory.
+
 ## Install in Claude Code
 
 This plugin is published as its own marketplace repo, so you can install it straight from GitHub:
@@ -180,7 +201,8 @@ Restart Claude Code or run `/reload-plugins`, then [connect an instance](#connec
 records which instances this project uses.
 
 (For local development: clone `xmemory-ai/claude-code-plugin`, run `claude --plugin-dir .` from
-its root, and run `sh hooks/test_hooks.sh` and `sh test_manifest.sh` before publishing.)
+its root, and run `sh hooks/test_hooks.sh`, `sh test_manifest.sh` and
+`uv run skills/ingest-docs/scripts/test_ingest.py` before publishing.)
 
 ## Install in Codex
 
