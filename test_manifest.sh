@@ -51,7 +51,7 @@ done
 
 # Phrases that only made sense while the plugin registered its own entries. A doc that
 # still carries one is describing a package that no longer exists.
-DOCS="README.md CODEX.md MIGRATION.md skills/connect/SKILL.md skills/doctor/SKILL.md skills/xmemory-memory/SKILL.md skills/VERIFYING.md"
+DOCS="README.md CODEX.md MIGRATION.md skills/connect/SKILL.md skills/doctor/SKILL.md skills/xmemory-memory/SKILL.md skills/ingest-docs/SKILL.md skills/VERIFYING.md"
 for phrase in \
     'registers two MCP servers' \
     'bundled `xmemory` server' \
@@ -67,7 +67,7 @@ for phrase in \
 done
 
 # The skills the README's What-ships table lists exist on disk under the names it gives them.
-for skill in connect doctor xmemory-memory; do
+for skill in connect doctor xmemory-memory ingest-docs; do
     if [ -f "skills/$skill/SKILL.md" ] && grep -q "^name: $skill\$" "skills/$skill/SKILL.md"; then
         ok "skills/$skill/SKILL.md exists and is named $skill"
     else

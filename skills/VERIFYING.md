@@ -1,7 +1,8 @@
 # Verifying the skills by hand
 
-The hooks have `hooks/test_hooks.sh`. The two skills do not, and cannot in the same
-sense: a skill is instructions to a model, so there is nothing to assert against
+The hooks have `hooks/test_hooks.sh`, and the ingest script has
+`skills/ingest-docs/scripts/test_ingest.py`. The skills themselves do not, and cannot in the
+same sense: a skill is instructions to a model, so there is nothing to assert against
 except a transcript. What follows is the walkthrough a reviewer or maintainer can run
 to see whether each still does what it says — written as steps with observable
 outcomes, not as prose about intent.
@@ -74,3 +75,49 @@ section the budget went to and offer retiering to `available` — not a reinstal
 `universal_rules` is not `null`, the per-instance figures sum to less than the total by exactly
 that block, which is carried once for the whole response. On a CLI old enough to return no `packs`, expect the totals alone and no suggestion that
 anything is broken.
+
+## ingest-docs
+
+Run it in a scratch directory against a small public docs site that serves Markdown (this
+product's own `https://xmemory.ai/llms.txt` works), with 10–20 questions about it, on an account
+where two throwaway instances are fine.
+
+1. **Preflight.** With the CLI signed out, ask to ingest docs. Expect: it reads
+   `xmemcli --json status` and `xmemcli --json auth status`, says the CLI must be signed in, and
+   offers the browser or the `--email` sign-in — it does not go on. With `XMEM_API_KEY` set
+   instead of a sign-in, it goes on without asking. With a CLI older than `1.5.1`, it proposes
+   the upgrade.
+2. **One question at a time.** Expect where the docs go, the question list and the doc source
+   asked in separate messages, then `discover` output shown as groups, and a scope question.
+3. **Script, not context.** Across the whole run, the transcript should show the agent reading
+   only the five sample chunks, the pilot chunks and the answers — never a page or the chunk
+   directory wholesale.
+4. **Schema.** Expect a tight instance for lookup questions and, when there are how/why
+   questions, a broad one; XMD written by the agent after reading the XMD guide, passing
+   `xmemcli xmd validate`, and shown as tables. Every key sits on a field marked
+   `required: true` that the docs state wherever the thing is mentioned; objects without such a
+   field have `primary_key: []`.
+5. **Gate 1.** Nothing is created before the user approves "create and pilot".
+6. **Pilot.** Expect `write --sync` on 5–10 chunks covering every question group, each chunk
+   shown beside the objects it produced, the warnings discussed, and a token projection. Ask for a
+   description change: expect `schema dry-run`, approval, `schema update`, the pilot chunks
+   rewritten with `--force --sync`, and a word on records the rewrite may have stored twice. Then
+   ask to remove an enum value, or for a key the pilot records collide under: expect a new pilot
+   instance from the corrected schema, proposed for approval, not a workaround.
+7. **Gate 2.** Nothing bulk-written before the user approves a message that states the write
+   count, the projected tokens and the time.
+8. **Resume.** Interrupt the bulk write, rerun the same command: expect the finished chunks
+   reported as `already_written` and none sent twice. Run it once more after it completes: zero
+   writes.
+9. **Change one section.** Make a small edit to one section of a cached page under the run's
+   `pages/` directory, run `prepare` and `write --all` again: exactly one chunk per instance is
+   written.
+10. **Verify.** Expect every question answered through `ask`, a verdict per answer checked
+    against a few chunks (not the corpus), and each miss paired with a proposed schema change
+    that goes through `dry-run` and approval before it is applied.
+11. **Existing instance.** Run it again, naming an instance that already holds data. Expect no
+    create: its schema read with `schema get` and shown, each question mapped to where its answer
+    would live, additions proposed only through `dry-run` and approval, the gate worded as a
+    pilot write into that instance, and every overwrite of an existing value called out in the
+    pilot. A key it cannot change leads to an offer of a separate instance, never to replacing
+    the user's.

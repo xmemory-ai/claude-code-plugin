@@ -12,3 +12,6 @@
 # skills tell users it must never be committed — so it must never be committable
 # from here either.
 .xmemrc.json
+
+# Bytecode from running the ingest script and its tests; it embeds local paths.
+__pycache__/
