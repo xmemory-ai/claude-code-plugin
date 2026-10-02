@@ -64,7 +64,7 @@ HARD_MAX_FACTOR = 3
 # Windows caps a whole command line at 32,767 characters, and a chunk travels as one argument.
 WINDOWS_ARG_LIMIT = 30000
 # How a failed write that may nevertheless have been stored is reported, logged and counted.
-MAY_HAVE_LANDED = "it may still have landed - check for what it would store before writing it again with --force"
+MAY_HAVE_LANDED = "it may have landed - check whether it is stored, then --mark-stored or --resend-unknown"
 # Pause before asking again for a finished write's report, times the attempt.
 REPORT_RETRY_SECONDS = 5
 USER_AGENT = "xmemory-ingest-docs/1.0 (+https://xmemory.ai)"
@@ -142,6 +142,7 @@ class Run:
         self.root = Path(root)
         self.config = self.root / "run.json"
         self.pages = self.root / "pages.jsonl"
+        self.skipped_file = self.root / "skipped.jsonl"
         self.page_dir = self.root / "pages"
         self.chunk_dir = self.root / "chunks"
         self.manifest = self.root / "manifest.jsonl"
@@ -185,7 +186,7 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
             try:
                 rows.append(json.loads(line))
             except json.JSONDecodeError:
-                # A line cut short by a crash mid-append; every complete line before it stands.
+                # A line cut short when a run was stopped mid-append; every complete line before it stands.
                 continue
     return rows
 
@@ -531,6 +532,8 @@ class Discovery:
         self.skipped = 0
         self.skipped_types: dict[str, int] = {}
         self.skipped_examples: dict[str, list[str]] = {}
+        # Every skipped location, for the run's `skipped.jsonl`: the output shows only examples.
+        self.skipped_all: list[dict[str, str]] = []
         self.skipped_keys: set[str] = set()
 
     def skip(self, location: str) -> None:
@@ -542,6 +545,7 @@ class Discovery:
         kind = extension(location) or "(no extension)"
         if kind in (".json", ".yaml", ".yml") and not looks_like_api_spec(location):
             kind += " (not an API spec)"
+        self.skipped_all.append({"location": location, "kind": kind})
         self.skipped_types[kind] = self.skipped_types.get(kind, 0) + 1
         examples = self.skipped_examples.setdefault(kind, [])
         if len(examples) < 3:
@@ -788,6 +792,7 @@ def cmd_discover(args: argparse.Namespace) -> int:
     exclude = args.exclude if args.exclude is not None else saved_exclude
     apply_scope(discovery.pages, include, exclude)
     write_jsonl(run.pages, discovery.pages)
+    write_jsonl(run.skipped_file, discovery.skipped_all)
     config.update({"sources": args.sources, "include": include, "exclude": exclude, "discovered_at": now_iso()})
     run.save_config(config)
     in_scope = [p for p in discovery.pages if p["in_scope"]]
@@ -810,6 +815,7 @@ def cmd_discover(args: argparse.Namespace) -> int:
         "sources": discovery.notes,
         "groups": group_summary(discovery.pages),
         "pages_file": str(run.pages),
+        "skipped_file": str(run.skipped_file),
     })
     return 0
 
@@ -1628,7 +1634,10 @@ class Writer:
             self.halt(f"xmemcli is not signed in or the key was refused: {result.error}")
             return True
         if result.code == EXIT_USAGE:
-            self.halt(f"xmemcli rejected the command (is it older than 1.5.1?): {result.error}")
+            self.halt(
+                f"xmemcli refused the command or could not start ({result.error}); check that it is 1.5.1 or "
+                "newer and that the network is up, then rerun the same command"
+            )
             return True
         return False
 
@@ -1670,14 +1679,20 @@ class Writer:
                 continue
             errors += 1
             if errors >= 5:
-                return "pending", f"write-status kept failing: {doc.get('error') or result.error}"
+                return "pending", f"write-status gave no answer after 5 attempts: {doc.get('error') or result.error}"
             self.stop.wait(min(5 * errors, 30))
+
+    def not_sent(self, task: Task, attempts: int) -> str:
+        """Stop before the write could land: every attempt so far was refused (quota, sign-in, 429)."""
+        if attempts:
+            self.log(task, "not_sent")
+        return "stopped"
 
     def submit(self, task: Task, text: str) -> tuple[CliResult | None, str]:
         """Queue one write, retrying what is safe to retry. (result, error) - result None on failure.
 
         Pilot writes are queued too: the write id is logged before any waiting starts, so a write
-        the server is slow to finish is followed by its id, never left unknown and sent again.
+        still processing when the wait ends is followed by its id, never left unknown and sent again.
         """
         base = ["--verbose", "--instance-id", task.instance, "write", "--no-wait"]
         if os.name == "nt" and len(subprocess.list2cmdline(base + ["--", text])) > WINDOWS_ARG_LIMIT:
@@ -1687,20 +1702,30 @@ class Writer:
             )
         for attempt in range(5):
             if self.stop.is_set():
-                return None, "stopped"
+                return None, self.not_sent(task, attempt)
+            if attempt == 0:
+                # Logged before the write leaves: if the run is killed before its answer is logged,
+                # the next run reads this row as `unknown` instead of sending the chunk again.
+                self.log(task, "sending")
             result = self.cli.run(base + ["--", text], timeout=90)
             # Exit 8: accepted and still being processed; the answer carries the id to follow.
             if result.code in (EXIT_OK, EXIT_STILL_PROCESSING):
                 return result, ""
             if self.fatal(result):
-                return None, "stopped"
+                return None, self.not_sent(task, attempt + 1)
             if retryable(result) and attempt < 4:
                 delay = retry_delay(result, attempt)
                 progress(f"[write] {task.chunk['id']} -> {task.instance[:8]}: {result.error}; retrying in {int(delay)}s")
                 if self.stop.wait(delay):
-                    return None, "stopped"
+                    return None, self.not_sent(task, attempt + 1)
                 continue
             if not rejected(result):
+                status = result.http_status
+                if result.code in (EXIT_HTTP, LOCAL_TIMEOUT) and (status is None or status >= 500):
+                    # No answer, or a server error: the following writes would likely get the same
+                    # result, each left unknown. Stop, so only those already in flight are.
+                    self.halt(f"xmemory could not be reached or did not answer ({result.error}); "
+                              "rerun the same command once it is back")
                 return None, f"{MAY_HAVE_LANDED}: {result.error}"
             return None, result.error
         return None, "gave up after 5 attempts"
@@ -1726,7 +1751,8 @@ class Writer:
                     # A write's status can be looked up for a limited time, so one sent long ago
                     # whose status is gone has most likely landed. Sending it again would be a
                     # second copy; --force sends it anyway.
-                    error = "this write is too old to look up; it most likely landed (use --force to send it again)"
+                    error = ("this write is too old to look up; it most likely landed "
+                             "(check whether it is stored, then --mark-stored or --resend-unknown)")
                     self.log(task, "unknown", write_id, error)
                     return Outcome(task, "unknown", write_id, error)
             else:
@@ -1795,8 +1821,8 @@ class Writer:
         """The xmemory tokens one write used, from its trace: (tokens, error).
 
         Only the token count is read from the trace; what the write stored comes from its own
-        `changes`. A trace can arrive a few seconds after its write, so an empty one is asked for
-        again before it is reported as missing.
+        `changes`. A trace may not be available right away, so an empty one is asked for again
+        before it is reported as missing.
         """
         error = ""
         for attempt in range(8):
@@ -1859,7 +1885,9 @@ class Writer:
             "section": " > ".join(x for x in (task.chunk["title"], task.chunk["section"]) if x),
             "url": task.chunk["url"],
             "console_url": write_doc.get("console_url"),
-            "extracted": stored_tags(write_doc.get("changes")),
+            # What the write changed, not all it extracted: a record extracted exactly as already
+            # stored is not listed.
+            "changed_records": stored_tags(write_doc.get("changes")),
         }
         record.update(summarise_changes(write_doc.get("changes"), self.primary_keys(task.instance)))
         trace_id = write_doc.get("trace_id")
@@ -1867,7 +1895,11 @@ class Writer:
             record["tokens"], error = self.tokens_used(str(trace_id))
             if error:
                 record["tokens_error"] = error
-        path = self.run.pilot_dir / f"{task.chunk['id']}__{task.instance[:8]}.json"
+        # One file per write, not per chunk: a rewrite must not erase what an earlier round created.
+        write_id = str(write_doc.get("write_id") or "")
+        record["write_id"] = write_id or None
+        suffix = f"__{write_id[:8]}" if write_id else ""
+        path = self.run.pilot_dir / f"{task.chunk['id']}__{task.instance[:8]}{suffix}.json"
         write_atomic(path, json.dumps(record, indent=2, ensure_ascii=False) + "\n")
         record["file"] = str(path)
         return record
@@ -1899,7 +1931,6 @@ def missing_key_fields(identifier: str, keys: list[str]) -> list[str]:
 # Server notes that bear on the key decision, and what each means for the pilot.
 KEY_NOTES = {
     "merged_field_conflicts": "the server merged records whose values disagree; the key may be too coarse",
-    "skipped_candidates": "records were extracted but not stored",
 }
 
 
@@ -2016,11 +2047,44 @@ def state_by_instance(run: Run) -> dict[str, dict[str, dict[str, Any]]]:
     because the instance now holds what the version in between said.
     """
     latest: dict[str, dict[str, dict[str, Any]]] = {}
+    # A `sending` row is logged before a write leaves; a run killed at that moment leaves it as the
+    # last row, and it reads as `unknown`. A send that certainly did not land puts the chunk back
+    # as it was before it.
+    before_sending: dict[tuple[str, str], tuple[dict[str, Any] | None, dict[str, Any] | None]] = {}
+    # The version each instance is known to hold, while no other version may have landed since: a
+    # failed rewrite of it does not undo that.
+    stored: dict[tuple[str, str], dict[str, Any]] = {}
     for row in read_jsonl(run.state):
         rows = latest.setdefault(row["instance"], {})
+        key = (row["instance"], row["chunk"])
+        if row["status"] == "sending":
+            before_sending[key] = (rows.get(row["chunk"]), stored.get(key))
+            if stored.get(key, {}).get("hash") != row["hash"]:
+                stored.pop(key, None)  # another version is on its way: what is held may change
+            rows[row["chunk"]] = row
+            continue
+        if key in before_sending:
+            earlier, earlier_stored = before_sending.pop(key)
+            if row["status"] in ("failed", "not_sent"):
+                if earlier is None:
+                    rows.pop(row["chunk"], None)
+                else:
+                    rows[row["chunk"]] = earlier
+                if earlier_stored is not None:
+                    stored[key] = earlier_stored
+        if row["status"] == "not_sent":
+            continue
         earlier = rows.get(row["chunk"])
-        if row["status"] == "failed" and earlier is not None and earlier["hash"] != row["hash"]:
-            continue  # a different version that failed was never stored; the earlier one still is
+        if row["status"] == "failed" and earlier is not None:
+            if earlier["hash"] != row["hash"]:
+                continue  # a different version that failed was never stored; the earlier one still is
+            if stored.get(key, {}).get("hash") == row["hash"]:
+                rows[row["chunk"]] = stored[key]  # this version was stored before the rewrite failed
+                continue
+        if row["status"] == "completed":
+            stored[key] = row
+        elif stored.get(key, {}).get("hash") != row["hash"]:
+            stored.pop(key, None)  # a different version may have landed
         rows[row["chunk"]] = row
     return latest
 
@@ -2043,11 +2107,44 @@ def cmd_write(args: argparse.Namespace) -> int:
     for instance in instances:
         if not UUID_RE.fullmatch(instance.lower()):
             raise UsageError(f"not an instance id: {instance}")
-    cli = XmemCli(args.xmemcli)
     # The manifest and the log are read under the lock, so no other `write` or `prepare` can change
     # them between reading what is due and sending it.
+    if args.mark_stored:
+        if not args.chunks:
+            raise UsageError("--mark-stored needs --chunks: name the chunks a check found stored")
+        if len(instances) != 1:
+            raise UsageError("--mark-stored takes one --instance: the one where the check found the chunks")
+        with RunLock(run):
+            return mark_stored(run, instances, args)  # sends nothing, so it needs no xmemcli
+    cli = XmemCli(args.xmemcli)
     with RunLock(run):
         return write_locked(run, cli, instances, args)
+
+
+def mark_stored(run: Run, instances: list[str], args: argparse.Namespace) -> int:
+    """Record `unknown` chunks as written, after a check found what they say in the instance.
+
+    Only chunks whose current version is `unknown` are touched, and nothing is sent: this closes
+    the question so a later `--resend-unknown` does not store them a second time.
+    """
+    latest = state_by_instance(run)
+    marked, left = [], []
+    rows = []
+    for chunk in select_chunks(run.load_manifest(), args):
+        for instance in instances:
+            row = latest.get(instance, {}).get(chunk["id"])
+            status = row["status"] if row and row["hash"] == chunk["hash"] else None
+            entry = {"chunk": chunk["id"], "instance": instance}
+            if status in ("unknown", "sending"):
+                rows.append({"at": now_iso(), **entry, "hash": chunk["hash"], "status": "completed",
+                             "note": "marked stored after a check"})
+                marked.append(entry)
+            else:
+                left.append({**entry, "status": status or "not_written"})
+    with run.state.open("a", encoding="utf-8") as handle:
+        handle.write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+    emit({"run": str(run.root), "marked_stored": marked, "not_unknown": left})
+    return 0
 
 
 def write_locked(run: Run, cli: XmemCli, instances: list[str], args: argparse.Namespace) -> int:
@@ -2057,15 +2154,20 @@ def write_locked(run: Run, cli: XmemCli, instances: list[str], args: argparse.Na
     tasks: list[Task] = []
     buckets = ("completed", "already_written", "failed", "pending", "unknown", "not_attempted")
     counts = {i: dict.fromkeys(buckets, 0) for i in instances}
+    held: list[dict[str, Any]] = []  # unknown from earlier runs: listed, so each can be checked
     for chunk in chunks:
         for instance in instances:
             row = latest.get(instance, {}).get(chunk["id"])
             status = row["status"] if row and row["hash"] == chunk["hash"] else None
+            if status == "sending":
+                status = "unknown"  # the run stopped while this write was leaving: it may have landed
             if status == "completed" and not args.force:
                 counts[instance]["already_written"] += 1
                 continue
             if status == "unknown" and not (args.force or args.resend_unknown):
                 counts[instance]["unknown"] += 1
+                reason = (row or {}).get("error") or f"{MAY_HAVE_LANDED}: the run stopped while this write was being sent"
+                held.append({"chunk": chunk["id"], "instance": instance, "error": reason})
                 continue
             # This same text still in flight is collected first, even under --force: a second
             # copy sent while the first is being processed would land beside it, its id lost.
@@ -2134,7 +2236,8 @@ def write_locked(run: Run, cli: XmemCli, instances: list[str], args: argparse.Na
         "stopped": writer.stop_reason or None,
         "failures": failures[:50],
         "failures_count": len(failures),
-        "unknown": unknown[:50],
+        # This run's unknown writes, then those held back from earlier runs, each with its reason.
+        "unknown": (unknown + held)[:50],
         "seconds": int(time.monotonic() - started),
         "log": str(run.state),
     }
@@ -2227,7 +2330,7 @@ def compact_pilot(record: dict[str, Any]) -> dict[str, Any]:
         "objects": rendered,
         "more_objects": max(0, len(objects) - 15),
         "updated_records": len(record.get("updated") or []),
-        "extracted": [re.sub(r"\(#\d+\)$", "", str(tag)) for tag in record.get("extracted") or []],
+        "changed_records": [re.sub(r"\(#\d+\)$", "", str(tag)) for tag in record.get("changed_records") or []],
         "relations": len(record.get("relations") or []),
         "server_notes": {bucket: len(entries) for bucket, entries in (record.get("server_notes") or {}).items()},
         "warnings": record.get("warnings") or [],
@@ -2250,6 +2353,7 @@ def estimate(run: Run, manifest: list[dict[str, Any]], pilot: list[dict[str, Any
         if not rows or not sampled:
             continue
         per_instance[instance] = {
+            "based_on_chunks": len(rows),
             "pilot_tokens": round(spent, 1),
             "tokens_per_1000_chars": round(1000 * spent / sampled, 1),
             "projected_tokens_all_chunks": int(spent / sampled * total_chars),
@@ -2276,7 +2380,7 @@ def cmd_status(args: argparse.Namespace) -> int:
             elif row["hash"] != chunk["hash"]:
                 states["outdated"] += 1  # an earlier version of this chunk was written
             else:
-                status = "pending" if row["status"] in ("queued", "pending") else row["status"]
+                status = {"queued": "pending", "sending": "unknown"}.get(row["status"], row["status"])
                 states[status] = states.get(status, 0) + 1
         report[instance] = states
     emit({"run": str(run.root), "chunks": len(manifest), "instances": report})
@@ -2415,6 +2519,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--resend-unknown", action="store_true",
         help="Send again the chunks whose earlier write may or may not have landed (status unknown)",
+    )
+    p.add_argument(
+        "--mark-stored", action="store_true",
+        help="With --chunks and one --instance: record unknown chunks as written there, once a check found "
+             "them stored; sends nothing",
     )
     p.add_argument("--concurrency", type=int, default=4)
     p.add_argument("--status-timeout", type=int, default=900, help="Seconds to wait for one write")
