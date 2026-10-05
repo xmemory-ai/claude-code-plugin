@@ -132,7 +132,15 @@ if command == "trace":
         out({"found": True, "xmemory_tokens_used": None})
     out({"found": True, "xmemory_tokens_used": 30.0})
 if command == "read":
-    out({"answer": "answer to " + rest[-1], "console_url": "https://console.example/read/y"})
+    read_mode = rest[rest.index("--read-mode") + 1] if "--read-mode" in rest else "single"
+    if read_mode == "single":
+        out({"answer": "answer to " + rest[-1], "console_url": "https://console.example/read/y"})
+    # An xresponse answer: the records the read selected, here more than the report lists.
+    out({"objects": [{"name": "Term", "identifier": "term='t%d'" % n,
+                      "fields": [{"name": "term", "value": {"string_value": "t%d" % n}},
+                                 {"name": "definition", "value": {"string_value": "answer to " + rest[-1]}}]}
+                     for n in range(17)],
+         "relations": [], "pending_suggestions": 0, "console_url": "https://console.example/read/y"})
 out({"error": "unexpected " + " ".join(args), "status": None, "stage": "usage"}, 2)
 '''
 
@@ -1116,16 +1124,45 @@ class WriteLoopTests(unittest.TestCase):
         self.assertEqual([p["title"] for p in sample["picks"]], ["Gamma", "Beta"])
         code, answers = run_main(["ask", "--run", self.run_dir, "--xmemcli", self.fake, "--instance", INSTANCE,
                                   "--questions", str(questions)])
-        self.assertEqual(answers["answers"][0]["answer"], "answer to How does gamma work?")
+        # xresponse by default: the report lists the selected records with plain values, and
+        # counts the ones past the first fifteen.
+        shown = answers["answers"][0]["answer"]
+        self.assertEqual(shown["records"][0],
+                         {"type": "Term", "id": "term='t0'",
+                          "fields": {"term": "t0", "definition": "answer to How does gamma work?"}})
+        self.assertEqual((len(shown["records"]), shown["more_records"]), (15, 2))
         self.assertTrue(Path(answers["file"]).exists())
-        # A second round keeps the first one's answers.
+        # The answers file keeps every record.
+        self.assertEqual(len(ingest.read_jsonl(Path(answers["file"]))[0]["answer"]["objects"]), 17)
+        code, single = run_main(["ask", "--run", self.run_dir, "--xmemcli", self.fake, "--instance", INSTANCE,
+                                 "--questions", str(questions), "--read-mode", "single"])
+        self.assertEqual(single["answers"][0]["answer"], "answer to How does gamma work?")
+        # Every later round keeps the earlier rounds' answers.
         one = Path(self.tmp.name) / "one.txt"
         one.write_text("What is beta usage?\n")
         run_main(["ask", "--run", self.run_dir, "--xmemcli", self.fake, "--instance", INSTANCE, "--questions", str(one)])
         saved = ingest.read_jsonl(Path(answers["file"]))
         self.assertEqual([row["question"] for row in saved],
-                         ["How does gamma work?", "What is beta usage?", "What is beta usage?"])
+                         ["How does gamma work?", "What is beta usage?", "How does gamma work?", "What is beta usage?",
+                          "What is beta usage?"])
         self.assertTrue(all(row.get("asked_at") for row in saved))
+
+    def test_a_long_answer_is_shown_within_its_budget(self) -> None:
+        answer = {"objects": [{"name": "Concept", "identifier": "", "fields": [
+            {"name": "explanation", "value": {"string_value": "x" * 1000}},
+            {"name": "rank", "value": {"int_value": n}},
+            {"name": "type", "value": {"string_value": "field named type"}}]} for n in range(20)],
+            "relations": []}
+        shown = ingest.records_shown(answer)
+        self.assertLess(len(shown["records"]), 15)
+        self.assertEqual(len(shown["records"]) + shown["more_records"], 20)
+        self.assertLessEqual(len(json.dumps(shown["records"])), 3500)
+        first = shown["records"][0]
+        self.assertEqual((first["type"], first["fields"]["type"], first["fields"]["rank"]),
+                         ("Concept", "field named type", 0))
+        self.assertEqual(len(first["fields"]["explanation"]), 204)
+        # Nothing selected is shown as such, not as an error.
+        self.assertEqual(ingest.records_shown({"objects": [], "relations": []}), {"records": []})
 
     def first_chunk(self) -> str:
         manifest = ingest.read_jsonl(Path(self.run_dir, "manifest.jsonl"))

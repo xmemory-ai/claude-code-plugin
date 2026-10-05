@@ -80,7 +80,8 @@ anything is broken.
 
 Run it in a scratch directory against a small public docs site that serves Markdown (this
 product's own `https://xmemory.ai/llms.txt` works), with 10–20 questions about it, on an account
-where two throwaway instances are fine.
+where several throwaway instances are fine (the pilot step creates two more, which you then
+delete).
 
 1. **Preflight.** With the CLI signed out, ask to ingest docs. Expect: it reads
    `xmemcli --json status` and `xmemcli --json auth status`, says the CLI must be signed in, and
@@ -99,21 +100,22 @@ where two throwaway instances are fine.
    field have `primary_key: []`.
 5. **Gate 1.** Nothing is created before the user approves "create and pilot".
 6. **Pilot.** Expect `write --sync` on 5–10 chunks covering every question group, each chunk
-   shown beside the objects it produced, the warnings discussed, and a token projection. Ask for a
-   description change: expect `schema dry-run`, approval, `schema update`, the pilot chunks
-   rewritten with `--force --sync`, and a word on records the rewrite may have stored twice. Then
-   ask to remove an enum value, or for a key the pilot records collide under: expect a new pilot
-   instance from the corrected schema, proposed for approval, not a workaround.
+   shown beside the objects it produced, the warnings discussed, and a token projection in
+   xmemory tokens. Ask for a description change, then for a removed enum value: each time expect
+   a new pilot instance from the corrected schema, proposed for approval, the pilot chunks written
+   to it with `--sync`, and the superseded instance named with its id for you to delete.
 7. **Gate 2.** Nothing bulk-written before the user approves a message that states the write
-   count, the projected tokens and the time.
+   count, the projected xmemory tokens and the time — with an offer of `--concurrency 8` when
+   the corpus runs to several hundred chunks.
 8. **Resume.** Interrupt the bulk write, rerun the same command: expect the finished chunks
    reported as `already_written` and none sent twice. Run it once more after it completes: zero
    writes.
 9. **Change one section.** Make a small edit to one section of a cached page under the run's
    `pages/` directory, run `prepare` and `write --all` again: exactly one chunk per instance is
    written.
-10. **Verify.** Expect every question answered through `ask`, a verdict per answer checked
-    against a few chunks (not the corpus), and each miss paired with a proposed schema change
+10. **Verify.** Expect every question answered through `ask`, each answer shown as the records
+    the read selected, a verdict per answer checked against a few chunks (not the corpus), and
+    each miss paired with a proposed schema change
     that goes through `dry-run` and approval before it is applied.
 11. **Existing instance.** Run it again, naming an instance that already holds data. Expect no
     create: its schema read with `schema get` and shown, each question mapped to where its
