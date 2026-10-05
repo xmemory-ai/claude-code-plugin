@@ -254,8 +254,17 @@ A primary key is a **unique constraint**: two mentions with the same key values 
 - **Settle keys in the pilot.** A key can always be relaxed later. Adding one, or making one
   stricter, needs the stored records to be distinct under the new key — `xmemcli schema dry-run`
   says whether they are. A documentation corpus mentions the same things in many sections, so the
-  pilot, while the instance holds only a handful of sections, is the easy moment to get keys right.
+  pilot is the easy moment to get keys right: while an instance holds only a handful of sections,
+  a key change costs no more than a fresh pilot instance.
 - Never add a key or a generated id just so an object can take part in a relation.
+- **A keyed record collects every section that mentions it.** Each write that names a keyed
+  record can set its fields, and the latest value stands. On an object many sections mention —
+  a product, an API endpoint, a command — keep to fields the docs state the same way wherever
+  the thing appears, and leave out catch-all text such as `notes`. Model a fact that differs from
+  section to section as its own keyed object: each parameter of an endpoint as a `Parameter`
+  keyed on `[endpoint, name]`, not a `parameters` field on the endpoint. When most sections
+  mention the thing only in passing, say in the object description which sections may create or
+  update it ("only a section about the product itself, not one that lists it among others").
 
 Validate each file until it passes (exit 0; a pass prints the schema back, normalised):
 
@@ -307,8 +316,15 @@ guide, `sample`, the five chunks, keys — applies to what you add.
 
 Then run step 6 without the create. Its `overwrote … value(s)` warnings show which values
 already in the instance the docs replace; show them, so the user sees it before the bulk write.
-A fix goes into their schema as in item 2. If a key must change and the dry-run refuses it, do
-not replace their instance — offer a separate instance for the docs and let the user decide.
+A fix goes into their schema as in item 2; then write the pilot chunks again with
+`--chunks <ids> --force --sync`, and say that a rewrite updates keyed records in place but does
+not take back what the earlier version stored — records of an unkeyed object may be stored again
+beside the first ones. A stray record the pilot created (a thing the docs only mention in
+passing, say) can be removed by a structured write, as under **Stored wrong** in
+[Verify](#8-verify), once the description that produced it is fixed — only a record the pilot
+created: its pilot files list them under `objects` and, for unkeyed types, `server_notes` →
+`created_keyless_objects`. If a key must change and the dry-run refuses it, do not replace their
+instance — offer a separate instance for the docs and let the user decide.
 
 ## 6. Create and pilot
 
@@ -330,14 +346,14 @@ uv run <ingest> write --run <run> --instance <id> [--instance <id2>] --chunks <c
 These are real writes into the instance; they count as done, and the bulk write skips them.
 The report shows, per chunk and instance, what each write stored — records created with their
 field values, fields it changed or filled on earlier records (old → new, `(empty)` → new) — plus
-warnings, the tokens the write used, and a Console link; `pilot/*.json` holds the full record,
-one file per write (the chunk id and the write id are in its name), so earlier rounds stay.
-A chunk lists up to 15 records; `more_objects` counts the rest, so when a record you expected is
-not listed, look in that chunk's `pilot/*.json` file. Show each chunk's section and first dozen
-lines (read those pilot chunk files only) next to what came out of it, then the `token_estimate`
-projection for the whole corpus. It is projected from this command's writes that report tokens
-(`based_on_chunks` counts them), so take it from the full pilot; a rewrite of one or two chunks
-projects roughly at best.
+warnings, the xmemory tokens the write used, and a Console link; `pilot/*.json` holds the full
+record, one file per write (the chunk id and the write id are in its name), so earlier rounds
+stay. A chunk lists up to 15 records; `more_objects` counts the rest, so when a record you
+expected is not listed, look in that chunk's `pilot/*.json` file. Show each chunk's section and
+first dozen lines (read those pilot chunk files only) next to what came out of it, then the
+`token_estimate` projection for the whole corpus, in xmemory tokens — the usage unit, not model
+tokens. It is projected from this command's writes that report tokens (`based_on_chunks` counts
+them), so take it from the full pilot; a run of one or two chunks projects roughly at best.
 
 Check, and say what you see:
 
@@ -354,36 +370,32 @@ Check, and say what you see:
 - **`overwrote … value(s)`** — a write changed a record an earlier chunk wrote, and the warning
   names the fields. Fine when it is the same thing described again (a page title refined, a
   purpose reworded); a sign the key is too coarse when two different things now share one record.
+  When the field is catch-all text (a `notes`, a list of parameters) on a record many sections
+  mention, each section replaces what the last one said: give that fact its own keyed object, or
+  say which sections may fill it (see [Keys](#keys-settle-them-in-the-pilot)).
   Pilot writes run four at a time, so which chunk wrote first can differ from round to round.
 - **The same thing as separate records** of an unkeyed object across chunks — it needs a key,
   and now is when it can still get one cleanly.
 - **`deleted`** — unexpected when loading documentation; find the description that
   made it.
 
-Fixing it: edit the XMD and `xmemcli xmd validate` it. A stray record the pilot stored (a thing
-the docs only mention in passing, say) can be removed by a structured write, as under
-**Stored wrong** in [Verify](#8-verify), once the description that produced it is fixed —
-only a record the pilot created (its pilot files list them under `objects` and, for unkeyed
-types, `server_notes` → `created_keyless_objects`). Then
-there are two ways to apply a schema fix:
+Fixing it: edit the XMD, `xmemcli xmd validate` it, and apply the fix through **a fresh pilot
+instance**: create a new instance from the corrected schema (with approval) and write the pilot
+chunks to it with `--sync`. The pilot holds only a handful of sections, so this is cheap, and the
+new instance starts with nothing left over from the earlier version — a stray record the earlier
+descriptions produced (a thing the docs only mention in passing, say) is simply not there. A
+rewrite into the same instance would update keyed records in place but keep what the earlier
+version stored: records of an unkeyed object stored again beside the first ones, and a record
+the fix now names differently under its old name too. From then on name the new instance in
+`write` in place of the old one; `status` still lists the old one as unwritten, which is
+expected.
 
-- **Update in place** — `xmemcli schema dry-run <id> --schema-file <file>`, show the preview,
-  and on approval `xmemcli schema update <id> --schema-file <file>`; then write the pilot chunks
-  again with `--chunks <ids> --force --sync`. This fits changes that only add or reword: new
-  fields, objects or relations, new enum values, sharper descriptions, and a key the dry-run
-  accepts. A rewrite updates keyed records in place, but it does not take back what the earlier
-  version stored: records of an unkeyed object may be stored again beside the first ones, and a
-  record the fix now names differently stays under its old name too. Say so when you show the
-  result.
-- **A fresh pilot instance** — for anything else: removing or renaming a field or an enum value,
-  a key the dry-run refuses because pilot records already collide under it, or a pilot that the
-  rewrite above would leave cluttered. Create a new instance from the corrected schema (with
-  approval) and pilot that; the old one holds only pilot sections, and the user can delete it in
-  the Console. From then on name only the new instance in `write`; `status` still lists the old
-  one as unwritten, which is expected. When the dry-run asks for a migration plan or refuses the
-  change, take this path rather than working around it. It is for instances this skill created:
-  an instance the user already had is never replaced (see
-  [Into an existing instance](#into-an-existing-instance)).
+The superseded instance holds only pilot sections. Name it and its id, and ask the user to delete
+it in the Console straight away, so the organisation holds only the instances in use; this
+matters most in an organisation other people work in. If creating the fresh instance hits the
+plan's instance limit, ask the user to delete the superseded one first, then create again. A
+fresh instance is for instances this skill created: an instance the user already had is never
+replaced, and takes its fixes as in [Into an existing instance](#into-an-existing-instance).
 
 Repeat until the user is satisfied. A pilot write the server has not finished when the wait runs
 out is `pending`: rerun the command later without `--force`, and it collects the write and its
@@ -402,16 +414,18 @@ everything else in the report does not depend on it.
 **Gate 2.** State, then ask to start:
 
 - chunks × instances = writes, minus the pilot chunks already written;
-- the projected tokens from the pilot against what is left of the quota:
+- the projected xmemory tokens from the pilot against what is left of the quota:
   `xmemcli --json --instance-id <id> quota` lists usage and limit per window when the plan sets
   them; when it lists nothing or reports an error, ask the user to check the plan in the
   Console. A run that hits a quota stops cleanly and resumes later;
 - the time it may take: the first full pilot's `seconds` divided by its chunks, times the chunks
-  left, is a rough guide (both run four writes at a time, and the pilot also builds its
-  reports, so it errs long); say that an interrupted run resumes where it stopped.
+  left, is a rough guide (the pilot runs four writes at a time and also builds its reports, so
+  it errs long; at `--concurrency 8`, expect less); say that an interrupted run resumes where it
+  stopped. For a corpus of several hundred chunks or more, offer `--concurrency 8`: more writes
+  in flight shorten a long run.
 
 ```bash
-uv run <ingest> write --run <run> --instance <id> [--instance <id2>] --all
+uv run <ingest> write --run <run> --instance <id> [--instance <id2>] --all [--concurrency 8]
 ```
 
 Every chunk goes to every chosen instance; each schema keeps what it describes. A large corpus
@@ -459,10 +473,16 @@ chunks: an earlier version of them was written, the current one not yet.
 uv run <ingest> ask --run <run> --instance <id> [--instance <id2>] --questions <run>/questions.txt
 ```
 
+`ask` reads in `xresponse` mode: each answer lists the records the read selected, with their id
+and fields, which is the evidence to judge it by. It prints the first records of each answer —
+up to 15 within about 3,000 characters, long values shortened — and counts the rest under
+`more_records`; `answers.jsonl` holds each answer whole. `--read-mode single` asks for one short
+answer instead, and `--read-mode raw` for the tables (whole in `answers.jsonl`).
+
 Judge every answer. To check one against the docs, [search the chunks](#searching-the-chunks) for
 a term the answer would contain, or run `sample` on just that question with `--per-question 3` —
-never read the corpus. Show a table: question,
-instance, short answer, verdict (correct, partial, wrong, no answer), Console link.
+never read the corpus. Show a table: question, instance, short answer (what the records say),
+verdict (correct, partial, wrong, no answer), Console link.
 `answers.jsonl` keeps every round, each answer with the time it was asked.
 
 For each miss, first [check whether the answer was stored](#checking-what-is-stored), listing
@@ -494,7 +514,7 @@ re-extract what is already written: rewrite the chunks that matter — [search t
 chunks](#searching-the-chunks) for a term from the answer or from the wrong record, then
 `write --chunks <ids> --force`, adding
 `--sync` to see what each rewrite changed. Rewrite everything with `--all --force`, at full
-cost, only if the user asks. As in the pilot, a rewrite does not take back what the earlier
+cost, only if the user asks. As noted in the pilot, a rewrite does not take back what the earlier
 version stored: unkeyed records may now appear twice.
 
 ## Finish

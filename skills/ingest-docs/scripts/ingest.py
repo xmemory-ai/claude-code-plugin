@@ -2392,6 +2392,38 @@ def cmd_status(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------------------------
 
 
+def records_shown(answer: dict[str, Any], limit: int = 15, budget: int = 3000) -> dict[str, Any]:
+    """An xresponse answer as the records it selected, each with its id and plain field values.
+
+    The whole answer stays in answers.jsonl. The report keeps it valid JSON rather than cutting it
+    mid-record, and small enough that a round of questions does not flood the agent's context:
+    at most `limit` records within about `budget` characters, values shortened, the rest counted.
+    """
+    objects = answer["objects"]
+    records: list[dict[str, Any]] = []
+    used = 0
+    for obj in objects[:limit]:
+        fields = {}
+        for field in obj.get("fields") or []:
+            value = scalar(field.get("value"))
+            if isinstance(value, str) and len(value) > 200:
+                value = value[:200] + " ..."
+            fields[field.get("name")] = value
+        # Fields sit apart from the object type: a schema may well have a field named `type`.
+        record = {"type": obj.get("name"), "id": obj.get("identifier"), "fields": fields}
+        size = len(json.dumps(record, ensure_ascii=False))
+        if records and used + size > budget:
+            break
+        records.append(record)
+        used += size
+    shown: dict[str, Any] = {"records": records}
+    if len(objects) > len(records):
+        shown["more_records"] = len(objects) - len(records)
+    if answer.get("relations"):
+        shown["relations"] = len(answer["relations"])
+    return shown
+
+
 def cmd_ask(args: argparse.Namespace) -> int:
     run = Run(args.run)
     run.ensure()
@@ -2445,7 +2477,9 @@ def cmd_ask(args: argparse.Namespace) -> int:
     shown = []
     for entry in answers:
         item = dict(entry)
-        if isinstance(item.get("answer"), str) and len(item["answer"]) > 1200:
+        if isinstance(item.get("answer"), dict) and isinstance(item["answer"].get("objects"), list):
+            item["answer"] = records_shown(item["answer"])
+        elif isinstance(item.get("answer"), str) and len(item["answer"]) > 1200:
             item["answer"] = item["answer"][:1200] + " ..."
         elif item.get("answer") is not None and not isinstance(item.get("answer"), str):
             text = json.dumps(item["answer"], ensure_ascii=False)
@@ -2538,7 +2572,7 @@ def build_parser() -> argparse.ArgumentParser:
     with_cli(p)
     p.add_argument("--instance", action="append", required=True)
     p.add_argument("--questions", required=True)
-    p.add_argument("--read-mode", choices=("single", "xresponse", "raw"), default="single")
+    p.add_argument("--read-mode", choices=("single", "xresponse", "raw"), default="xresponse")
     p.add_argument("--concurrency", type=int, default=4)
     p.set_defaults(func=cmd_ask)
     return parser
