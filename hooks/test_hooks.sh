@@ -75,7 +75,9 @@ STUB
 # developer with the documented opt-out exported saw most of it fail, and inherited
 # XMEM_* credentials plus a system-wide `xmemcli` on the "bare" PATH could turn the
 # no-CLI cases into real client calls. Every variable this plugin or its CLI reads is
-# cleared here; a case that wants one sets it explicitly.
+# cleared here; a case that wants one sets it explicitly. That includes uv's tool
+# directories, which the hooks search after PATH: a developer whose
+# UV_TOOL_BIN_DIR holds a real client would otherwise turn every no-CLI case green.
 # Every invocation that exited non-zero, one line each, asserted once at the end.
 #
 # A file and not a counter, because the usual call shape is `out=$(run_hook …)` and a
@@ -101,7 +103,7 @@ run_hook() {
     _project=$2
     _path=$3
     ( cd "$_project" && env -u XMEMORY_DISABLE_HOOKS -u XMEM_API_KEY -u XMEM_API_URL \
-        -u XMEM_RC_DIR -u XMEM_BINDING_DIR -u XMEM_INSTANCE_ID \
+        -u XMEM_RC_DIR -u XMEM_BINDING_DIR -u XMEM_INSTANCE_ID -u UV_TOOL_BIN_DIR -u XDG_BIN_HOME \
         PATH="$_path" HOME="$WORK/home" \
         CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" CLAUDE_PROJECT_DIR="$_project" \
         sh "$HOOKS_DIR/$_hook" ) 2>/dev/null
@@ -117,7 +119,7 @@ run_hook_err() {
     _project=$2
     _path=$3
     ( cd "$_project" && env -u XMEMORY_DISABLE_HOOKS -u XMEM_API_KEY -u XMEM_API_URL \
-        -u XMEM_RC_DIR -u XMEM_BINDING_DIR -u XMEM_INSTANCE_ID \
+        -u XMEM_RC_DIR -u XMEM_BINDING_DIR -u XMEM_INSTANCE_ID -u UV_TOOL_BIN_DIR -u XDG_BIN_HOME \
         PATH="$_path" HOME="$WORK/home" \
         CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" CLAUDE_PROJECT_DIR="$_project" \
         sh "$HOOKS_DIR/$_hook" ) 2>&1 >/dev/null
@@ -223,9 +225,14 @@ esac
 
 # ── 6. no CLI installed, binding tiered autoload: hint, exit 0 ────────────
 out=$(run_hook session_start.sh "$WORK/loaded" "$BARE_PATH")
+# The commands themselves, not just the name: a hint that drifted back to a bare
+# install, or to a sign-in written into the project, would still mention xmemcli.
+# `$HOME` must arrive unexpanded, as the command the user runs, not this machine's path.
 case "$out" in
-    *'xmemcli'*) ok "a missing CLI produces an install hint" ;;
-    *) no "a missing CLI produces an install hint" "a mention of xmemcli" "$out" ;;
+    *'uv tool install --upgrade xmemcli'*'auth login --rc-dir \"$HOME\" --email'*)
+        ok "a missing CLI produces the install and home email sign-in hint" ;;
+    *) no "a missing CLI produces the install and home email sign-in hint" \
+        'uv tool install --upgrade xmemcli, then auth login --rc-dir "$HOME" --email' "$out" ;;
 esac
 
 # ── 7. no CLI, and nothing tiered autoload: still silent ─────────────────
@@ -531,6 +538,25 @@ for _home in "$WORK/homespell/real" "$WORK/homespell/real/" "$WORK/homespell/lin
         no "the home binding is listed once for HOME=$_home" "1 candidate" "$_n"
     fi
 done
+
+# ── 22. a fresh install off PATH is still found where uv put it ─────────
+# The connect skill registers the absolute path when an install lands outside PATH,
+# so MCP works at once; the hook has to find the same client, or autoload stays off
+# behind an install hint for a CLI that is already there.
+mkdir -p "$WORK/home/.local/bin"
+cat > "$WORK/home/.local/bin/xmemcli" <<'STUB'
+#!/bin/sh
+printf '# xmemory — Team\nFound outside PATH.\n'
+exit 0
+STUB
+chmod +x "$WORK/home/.local/bin/xmemcli"
+out=$(run_hook session_start.sh "$WORK/loaded" "$BARE_PATH")
+case "$out" in
+    *'Found outside PATH'*) ok "a CLI in ~/.local/bin but not on PATH is still used" ;;
+    *) no "a CLI in ~/.local/bin but not on PATH is still used" "the stub's pack" "$out" ;;
+esac
+# Gone again, so no case that runs later can find a client it meant not to have.
+rm -rf "$WORK/home/.local"
 
 # ── every hook invocation this suite made exited 0 ───────────────────────
 # The headline guarantee of both hooks, over every call above rather than two of them.

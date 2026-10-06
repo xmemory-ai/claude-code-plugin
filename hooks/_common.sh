@@ -9,6 +9,20 @@
 
 BINDING_FILENAME=".xmemory.json"
 
+# ── where a fresh install of the CLI lives ────────────────────────────────
+# `uv tool install` puts `xmemcli` in $UV_TOOL_BIN_DIR, else $XDG_BIN_HOME, else
+# ~/.local/bin, which is pipx's default too. A fresh install there reaches PATH
+# only after `uv tool update-shell` and a new shell, and a hook inherits the PATH
+# its client was started with. So a CLI installed in this session read as missing
+# here, even with its absolute path registered for MCP: autoload stayed off, and
+# the hook asked the user to install a CLI they already had.
+# Appended, never prepended, so an `xmemcli` already on PATH still wins.
+_xmemcli_bin_dir=${UV_TOOL_BIN_DIR:-${XDG_BIN_HOME:-${HOME:-}/.local/bin}}
+case ":${PATH:-}:" in
+    *":$_xmemcli_bin_dir:"*) ;;
+    *) if [ -d "$_xmemcli_bin_dir" ]; then PATH="${PATH:+$PATH:}$_xmemcli_bin_dir"; fi ;;
+esac
+
 # ── opt-out ────────────────────────────────────────────────────────────────
 # Claude Code has no built-in way to switch off one hook of an installed plugin,
 # so a plugin is expected to provide its own. Without this the only way to stop
