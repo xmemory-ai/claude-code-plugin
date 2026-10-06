@@ -48,12 +48,21 @@ xmemcli --json status
 codex mcp add xmemory-<id8> -- xmemcli mcp <id>
 ```
 
-Read both `version` and `authenticated` in the status output; its exit code does not establish
-readiness. The `mcp` command requires `xmemcli` 0.0.7 or newer. Upgrade an older client with
-`uv tool install --upgrade xmemcli`; if credentials are absent, run `xmemcli auth login` before
-registering the server.
+Read `version`, `authenticated` and `rc_file` in the status output; its exit code does not
+establish readiness. If the shell does not find the CLI, or `version` is older than `0.0.9`
+(`mcp` arrived in 0.0.7, the emailed sign-in in 0.0.9), `uv tool install --upgrade xmemcli`
+installs or upgrades it. If the install says its directory is not on `PATH`, run
+`uv tool update-shell`, and until then register the absolute path it printed, in double quotes.
 
-When the CLI is absent or cannot be upgraded, use the browser-authorized direct form instead:
+If `authenticated` is false, or `rc_file` names a file other than `~/.xmemrc.json`, run
+`xmemcli auth login --rc-dir "$HOME" --email <address>` before registering the server. The one
+action is approving the emailed link, and `--rc-dir "$HOME"` writes the key to `~/.xmemrc.json`
+wherever it runs, so the session-start hook, which reads only that file, has the credential too.
+Delete a project `.xmemrc.json` afterwards: the connection reads the nearest file, so it would
+keep shadowing the home one.
+
+Only if the CLI cannot be installed or upgraded on the machine, use the direct form instead; its
+authorization page asks for an xmemory API key from the Console's **API Keys** page:
 
 ```bash
 codex mcp add xmemory-<id8> --url "https://mcp.xmemory.ai/instance/<id>"

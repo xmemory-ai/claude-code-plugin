@@ -89,8 +89,9 @@ live and die with the plugin. Nothing else changes:
   authorized.
 - **If you had authorized the `xmemory` entry an older version bundled** and relied on it,
   register that instance explicitly: `claude mcp add xmemory-<id8> -- xmemcli mcp <id>` with the
-  CLI signed in, or the direct form — the README shows both. `xmemcli org list instances` lists
-  your instances if you are unsure which one it was bound to.
+  CLI signed in, or the direct form, whose authorization page asks for an xmemory API key — the
+  README shows both. `xmemcli org list instances` lists your instances if you are unsure which
+  one it was bound to.
 - **If you used the admin tools over MCP**, add the admin entry yourself:
   `claude mcp add --transport http xmemory-admin https://mcp.xmemory.ai/admin` (Codex:
   `codex mcp add xmemory-admin --url https://mcp.xmemory.ai/admin`). The CLI covers the same

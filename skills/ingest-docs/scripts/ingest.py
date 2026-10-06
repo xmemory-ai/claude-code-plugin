@@ -1499,7 +1499,8 @@ class XmemCli:
         resolved = shutil.which(binary) or (binary if os.path.exists(binary) else None)
         if resolved is None:
             raise UsageError(
-                f"`{binary}` not found; install it with `uv tool install xmemcli` and sign in with `xmemcli auth login`"
+                f"`{binary}` not found; install it with `uv tool install --upgrade xmemcli` and sign in with "
+                '`xmemcli auth login --rc-dir "$HOME" --email <address>`'
             )
         self.binary = resolved
 

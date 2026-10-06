@@ -35,8 +35,8 @@ its first eight characters.
 
 If the xmemory CLI is installed and signed in, prefer the **client form**: the agent client
 starts `xmemcli mcp`, which reads the credential from the CLI's own configuration on every
-connection, so nothing secret or session-specific is captured in the entry and no browser
-sign-in is needed — now or in any later session.
+connection, so nothing secret or session-specific is captured in the entry and there is no API
+key to paste — now or in any later session.
 
 ```bash
 # Claude Code
@@ -46,11 +46,27 @@ claude mcp add xmemory-<id8> -- xmemcli mcp <id>
 codex mcp add xmemory-<id8> -- xmemcli mcp <id>
 ```
 
-Check `xmemcli --json status` first and read both `version` and `authenticated` rather than its
-exit code. The `mcp` command requires at least `0.0.7`; upgrade an older client with
-`uv tool install --upgrade xmemcli`. If credentials are absent, run `xmemcli auth login`
-(browser, or `--email <address>` for a headless emailed approval). If the CLI is absent or cannot
-be upgraded, use the **direct form** instead, which signs in through the browser once per entry:
+Check `xmemcli --json status` first and read `version`, `authenticated` and `rc_file` rather
+than its exit code. If the shell does not find the CLI, or `version` is older than `0.0.9` (`mcp`
+arrived in `0.0.7`, the emailed sign-in in `0.0.9`), `uv tool install --upgrade xmemcli` installs
+or upgrades it. If the install says its directory is not on `PATH`, run `uv tool update-shell`,
+and until then register the absolute path it printed, in double quotes.
+
+If `authenticated` is false, or `rc_file` names a file other than `~/.xmemrc.json`, sign in:
+
+```bash
+xmemcli auth login --rc-dir "$HOME" --email <address>
+```
+
+Your one action is approving the emailed link. `--rc-dir "$HOME"` puts the key in
+`~/.xmemrc.json` wherever you run it, which is where the session-start hook reads it; without
+`--email`, the same command signs in through the browser. If `rc_file` named a project file,
+delete it afterwards: the connection reads the nearest file, so it would keep shadowing the home
+one.
+
+Only if the CLI cannot be installed or upgraded on your machine, use the **direct form**; its
+authorization page asks for an xmemory API key from the Console's **API Keys** page, once per
+entry:
 
 ```bash
 # Claude Code — then authorize it with /mcp, or `claude mcp login xmemory-<id8>`
@@ -85,8 +101,9 @@ claude mcp add --transport http xmemory-admin https://mcp.xmemory.ai/admin
 codex mcp add xmemory-admin --url https://mcp.xmemory.ai/admin
 ```
 
-Direct entries authorize via **OAuth 2.1 + PKCE** — a browser opens on first use; no static
-tokens are pasted into the client. Connection walkthrough: **https://xmemory.ai/mcp**.
+Direct entries are authorized on first use, on xmemory's authorization page, which asks for an
+xmemory API key from the Console's **API Keys** page. The key goes into that page, never into the
+command or the entry. Connection walkthrough: **https://xmemory.ai/mcp**.
 
 ## Project bindings (`.xmemory.json`)
 
@@ -116,11 +133,13 @@ is what actually reads and writes an instance's data (see
 [Connecting an instance](#connecting-an-instance) above).
 
 Autoload additionally needs the [`xmemcli`](https://pypi.org/project/xmemcli/) command-line client
-(`uv tool install xmemcli`), because pulling context at session start happens in a separate process
-that cannot reach the MCP OAuth token and needs its own credential — acquired once with
-`xmemcli auth login` (browser handoff), or headlessly with `xmemcli auth login --email <address>`,
-where the single human action is approving a sign-in email. Everything else — binding, and
-the instance context that arrives with the MCP connection — works without it.
+(`uv tool install --upgrade xmemcli`), because pulling context at session start happens in a
+separate process that cannot reach the MCP OAuth token and needs its own credential — acquired
+once with `xmemcli auth login --rc-dir "$HOME" --email <address>`, where the single human action
+is approving a sign-in email (or the same without `--email`, in the browser). The hook reads only
+`~/.xmemrc.json`, which `--rc-dir "$HOME"` writes wherever the command runs, and it also finds a
+CLI that uv installed in `~/.local/bin` before that directory is on `PATH`. Everything else —
+binding, and the instance context that arrives with the MCP connection — works without it.
 
 ## What ships
 
@@ -237,8 +256,8 @@ desktop checks, and cloud limitation.
 ### Memory tools (a per-instance entry)
 
 These are the tools an `xmemory-<id8>` entry exposes. With the direct form, the connect screen
-lets you choose exactly which to authorize, and the **schema-management** group starts
-unchecked; the client form grants the default groups.
+asks for an xmemory API key and lets you choose exactly which to authorize, and the
+**schema-management** group starts unchecked; the client form grants the default groups.
 
 **Core memory** (granted by default)
 
