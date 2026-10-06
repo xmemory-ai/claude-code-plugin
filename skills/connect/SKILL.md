@@ -46,19 +46,28 @@ xmemcli --json status
 
 One local call, contacting nothing, reports `version` and `authenticated` together:
 
-- **`command not found`** → no CLI. Use the direct form at the bottom of this section.
-- **`version` below `0.0.7`** → the client is too old: `mcp` arrived in 0.0.7, so registering
-  the client form would leave a server that cannot start. Ask the user to run
-  `uv tool install --upgrade xmemcli`, or use the direct form if they cannot upgrade.
-- **`"authenticated": false`** → sign the CLI in: ask the user to run `xmemcli auth login`
-  (browser), or — when `version` is `0.0.9` or newer — run the headless
-  `xmemcli auth login --email <their-address>` on their behalf; see
-  [Does the user need the CLI?](#does-the-user-need-the-cli) for how that approval works. On an
-  older client the headless flag does not exist: offer the browser flow, or
-  `uv tool install --upgrade xmemcli` first. One sign-in then serves this instance and every
-  later client-form entry. Continue after it succeeds.
-- **`"authenticated": true`** and `version` is at least `0.0.7` → go straight to the client
-  form below.
+- **The shell says `command not found`** → no CLI. Install it with
+  `uv tool install --upgrade xmemcli` (`pipx install xmemcli` where `uv` is missing), then sign it
+  in as below. If the install says its directory is not on `PATH`, run `uv tool update-shell` so
+  later sessions find `xmemcli`, and use the path the install printed in place of `xmemcli` for
+  the rest of these steps. The direct form at the bottom of this section is only for a machine
+  where the CLI cannot be installed.
+- **`version` below `0.0.9`** → upgrade it with `uv tool install --upgrade xmemcli`
+  (`pipx upgrade xmemcli` where it came from pipx). `mcp` arrived in 0.0.7, so an older client
+  leaves a server that cannot start, and the emailed sign-in below arrived in 0.0.9. The direct
+  form is only for a machine where it cannot be upgraded.
+- **`"authenticated": false`, `rc_file` naming a file other than `~/.xmemrc.json`, or a CLI you
+  just installed** → sign the CLI in. Ask for the email address of the user's xmemory account and
+  run `xmemcli auth login --rc-dir "$HOME" --email <their-address>` on their behalf: their one
+  action is approving the emailed link, and `--rc-dir "$HOME"` puts the key in `~/.xmemrc.json`
+  wherever this runs — the only file the session-start hook reads. See
+  [Does the user need the CLI?](#does-the-user-need-the-cli) for how that approval works. When
+  `rc_file` named a file inside a project, ask the user to delete it after this succeeds: the
+  connection reads the nearest file, so a project credential keeps shadowing the home one. One
+  sign-in then serves this instance and every later client-form entry. Continue after it
+  succeeds.
+- **`"authenticated": true`, `rc_file` is `~/.xmemrc.json`, and `version` is at least `0.0.9`** →
+  go straight to the client form below.
 
 `status` exits 0 whether credentials are present or absent: read the fields, never infer readiness
 from the exit code.
@@ -74,17 +83,22 @@ claude mcp add xmemory-<id8> -- xmemcli mcp <id>
 codex mcp add xmemory-<id8> -- xmemcli mcp <id>
 ```
 
+If the install printed a path because `xmemcli` is not on `PATH` yet, give the client that
+absolute path, in double quotes, in place of `xmemcli`: the client looks the command up again on
+every start, against its own `PATH`. The session-start hook also looks in uv's tool directory
+(`~/.local/bin` by default), so preloading finds the same CLI.
+
 `xmemcli mcp` is a transport, not a command a person runs: the client starts it, and it forwards
 each frame to that instance with the key read from `.xmemrc.json`. Nothing is captured when the
 entry is written, so it keeps working in later sessions without an exported environment variable.
 
 Registering it before signing in loses nothing: the server reports the missing credential in its
-failure line, and `xmemcli auth login` — browser, or its headless `--email` variant — fixes it
-without changing the MCP entry. Checking first
-simply avoids leaving the user with a connection that initially looks broken.
+failure line, and signing the CLI in fixes it without changing the MCP entry — by email as above,
+or in the browser without `--email`. Checking first simply avoids leaving the user with a
+connection that initially looks broken.
 
-**The direct form** — when the CLI is absent or too old and cannot be upgraded. Again, show only
-the active client's command:
+**The direct form** — only when the CLI cannot be installed or upgraded on this machine. Again,
+show only the active client's command:
 
 ```bash
 # Claude Code
@@ -94,11 +108,13 @@ claude mcp add --transport http xmemory-<id8> "https://mcp.xmemory.ai/instance/<
 codex mcp add xmemory-<id8> --url "https://mcp.xmemory.ai/instance/<id>"
 ```
 
-This form signs in through the browser once per entry. In Claude Code, authorize the named server
-with `/mcp` or `claude mcp login xmemory-<id8>`. In Codex, use `codex mcp login xmemory-<id8>`;
-`/mcp` shows the resulting connection. It does not authorize itself merely because it was
-registered, and an entry added mid-session usually connects only after the client restarts — say
-so rather than reporting it as connected.
+Its authorization page asks for an xmemory API key, created on the Console's **API Keys** page,
+once per entry — say so before the user meets it — and an entry made this way gives `autoload` no
+credential (see [Does the user need the CLI?](#does-the-user-need-the-cli)). In Claude Code,
+authorize the named server with `/mcp` or `claude mcp login xmemory-<id8>`. In Codex, use
+`codex mcp login xmemory-<id8>`; `/mcp` shows the resulting connection. It does not authorize
+itself merely because it was registered, and an entry added mid-session usually connects only
+after the client restarts — say so rather than reporting it as connected.
 
 Keep the two conditions as separate commands, not one shell conditional. This skill is used on
 POSIX shells and PowerShell, so choosing the applicable command in the instructions is portable
@@ -230,7 +246,8 @@ xmemcli binding remove "<id>" --binding-dir "$project_root" --scope project   # 
 To silence an instance that comes from a wider scope, bind it locally with `--tier off` rather
 than removing it.
 
-**If `xmemcli` is not installed**, write the file directly — the format is stable and versioned:
+**If `xmemcli` cannot be installed** — the user declined, or the install failed — write the file
+directly. The format is stable and versioned:
 
 ```json
 {
@@ -272,32 +289,27 @@ discovery leans on first, what the client-form connection runs, and what the ses
 needs: it is what lets an `autoload` instance actually pull its context at the start of a session,
 because a session-start hook is a separate process that cannot reach an MCP OAuth token and needs
 its own credential. Without the CLI, discovery falls back to an admin entry or the Console, and the
-connection takes the direct form.
+connection takes the direct form, whose page asks for an API key.
 
 So: if the user binds anything as `autoload`, mention once that the CLI is what makes autoload
-take effect, and offer the install:
+take effect, and offer the install and sign-in:
 
 ```bash
-uv tool install xmemcli    # or: pip install xmemcli
-xmemcli auth login
+uv tool install --upgrade xmemcli    # or: pipx install xmemcli
+xmemcli auth login --rc-dir "$HOME" --email <their-address>
 ```
 
-When there is no browser on this machine — or the user would rather not click through the
-Console — run the headless variant on their behalf (it needs `xmemcli` `0.0.9` or newer;
-upgrade older clients first):
-
-```bash
-xmemcli auth login --email <their-address>
-```
-
-The CLI reports the email is on its way and waits. The user's single action is opening the
-sign-in email and pressing **Approve** — only for a sign-in they just asked for. The
-command blocks until the approval arrives (up to ten minutes), so run it with a generous
-timeout and tell the user before starting it that an email is on its way;
-`--timeout <seconds>` shortens the wait. The
-credential is written straight to the CLI's own store and is never printed, so it never
-enters the conversation. If the CLI reports that the server offered no cross-device
-approval, fall back to the browser flow above.
+Ask for the email address of the user's xmemory account and run the sign-in on their behalf (it
+needs `xmemcli` `0.0.9` or newer; the install line above brings an older client up to date). The
+CLI reports the email is on its way and waits. The user's single action is opening the sign-in
+email and pressing **Approve** — only for a sign-in they just asked for. The command blocks until
+the approval arrives (up to ten minutes), so run it with a generous timeout and tell the user
+before starting it that an email is on its way; `--timeout <seconds>` shortens the wait. Do not
+start a second attempt while one is waiting — each attempt sends another email; once the key
+exists, running it again sends none. `--rc-dir "$HOME"` writes the credential straight to
+`~/.xmemrc.json`, wherever the command runs, and it is never printed, so it never enters the
+conversation. If the CLI reports that the server offered no cross-device approval, fall
+back to `xmemcli auth login`, which signs in through the browser.
 
 Mention it once, at that moment. Do not bring it up when everything is bound `available`, do not
 repeat it in later sessions, and never block the binding on it — a binding written today starts

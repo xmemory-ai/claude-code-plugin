@@ -100,7 +100,8 @@ xmemcli --json auth status
 
 Read the fields, not the exit codes:
 
-- **`command not found`** → ask to install it: `uv tool install xmemcli`.
+- **`command not found`** → ask to install it: `uv tool install --upgrade xmemcli`. If the
+  install says its directory is not on `PATH`, use the path it printed in place of `xmemcli`.
 - **`version` below `1.5.1`** → `uv tool upgrade xmemcli`. The pilot shows what each write
   changed, which the CLI reports from 1.5.1.
 - **`auth status` says `"authenticated": true`** → ready, whether the key comes from a sign-in
@@ -115,10 +116,13 @@ Read the fields, not the exit codes:
 - **Any other `error`** → the CLI could not check the key (network, server, configuration); show
   the error and stop. Signing in does not fix it.
 
-To sign in, `xmemcli auth login` opens the Console in a browser. Without a browser, run
-`xmemcli auth login --email <their-address>` for them: tell them first that a sign-in email is on
-its way and their one action is pressing **Approve**; the command waits up to ten minutes, so
-give it a long timeout and do not rerun it (each run sends another email).
+To sign in, ask for the email address of the user's xmemory account and run
+`xmemcli auth login --rc-dir "$HOME" --email <their-address>` for them: tell them first that a
+sign-in email is on its way and their one action is pressing **Approve**. The command waits up to
+ten minutes, so give it a long timeout, and do not start a second attempt while one is waiting —
+each attempt sends another email; once the key exists, running it again sends none.
+`--rc-dir "$HOME"` keeps the key in `~/.xmemrc.json`, out of the docs directory. Without
+`--email`, the same command opens the Console in a browser instead.
 
 Then check `uv --version`. When `uv` is missing, ask to install it — `xmemcli` is usually
 installed with it — or, for sources that are all Markdown, use `python3` 3.9 or newer.

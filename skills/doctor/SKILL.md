@@ -63,13 +63,16 @@ the right one: it takes no arguments, changes nothing, and costs nothing.
   - **Stdio with `command: xmemcli`** → it authenticates with the CLI credential. Run
     `xmemcli --json status`, which reports both likely causes locally. A `version` below `0.0.7`
     predates the `mcp` command, so upgrade with `uv tool install --upgrade xmemcli`. If the version
-    is current but `authenticated` is false, sign the CLI in — `xmemcli auth login`, or on
-    `0.0.9`+ the headless `xmemcli auth login --email <address>`. Either fix leaves the MCP
+    is current but `authenticated` is false, sign the CLI in — on `0.0.9`+ with
+    `xmemcli auth login --rc-dir "$HOME" --email <address>`, where the user only approves the
+    emailed link, or the same without `--email` in the browser. Either fix leaves the MCP
     configuration intact. If the version is current and credentials are present, the key may have
     been revoked; the server's failure line distinguishes that case.
-  - **Streamable HTTP with no bearer token or `Authorization` header** → it authenticates in
-    the browser. In Claude Code, use `/mcp` or `claude mcp login <server-name>`. In Codex, use
-    `codex mcp login <server-name>`; `/mcp` shows the connection afterward.
+  - **Streamable HTTP with no bearer token or `Authorization` header** → it is authorized on
+    xmemory's page, which asks for an xmemory API key from the Console's **API Keys** page. In
+    Claude Code, use `/mcp` or `claude mcp login <server-name>`. In Codex, use
+    `codex mcp login <server-name>`; `/mcp` shows the connection afterward. Where the CLI can be
+    installed, re-registering the entry in the client form needs no key to paste.
 
   For Codex, `codex mcp get <server-name> --json` reports these as
   `transport.type: "stdio"` and `transport.type: "streamable_http"`. For Claude Code, inspect the
@@ -109,17 +112,25 @@ tier change, not a reinstall.
 
 ## 4. Is the CLI installed and signed in?
 
-Two separate states; check both, because the fix differs:
+Separate states; check each, because the fix differs:
 
 ```bash
 command -v xmemcli        # installed?
 xmemcli --json status     # version and whether local credentials are present
 ```
 
-- Not installed → `uv tool install xmemcli` (or `pip install xmemcli`).
-- Installed but not signed in → `xmemcli auth login` (browser), or headless on `0.0.9`+:
-  `xmemcli auth login --email <address>` — the CLI waits while the user's one action is
-  approving the sign-in email for the attempt they just started.
+- Not installed → `uv tool install --upgrade xmemcli` (or `pipx install xmemcli`). Before
+  calling it missing, check `~/.local/bin/xmemcli`, uv's default tool directory: a fresh
+  install there is off `PATH` until `uv tool update-shell` and a new shell. The hook searches
+  that directory too, so report it as installed but off `PATH`.
+- Installed but older than `0.0.9` → `uv tool install --upgrade xmemcli` first; the emailed
+  sign-in arrived in `0.0.9`.
+- Not signed in, or `rc_file` names a file other than `~/.xmemrc.json` →
+  `xmemcli auth login --rc-dir "$HOME" --email <address>` — the CLI waits while the user's one
+  action is approving the sign-in email for the attempt they just started — or the same without
+  `--email` in the browser. The hook reads only `~/.xmemrc.json`, so a credential inside the
+  project serves the MCP connection but not the hook. After the home sign-in, suggest deleting
+  the project file, which would otherwise keep shadowing it for the connection.
 
 This is **only** needed for preloading bound instances at session start, because that
 happens in a hook — a separate process that cannot reach the MCP connection's OAuth
@@ -315,7 +326,7 @@ Give a short line per check, then the fixes in the order they should be applied
 (registration before authorisation, installation before sign-in). Prefer naming the
 one thing that is actually wrong over listing everything that is right.
 
-Two states worth calling out explicitly, because they read as breakage and are not:
+Three states worth calling out explicitly, because they read as breakage and are not:
 
 - **Plugin installed, nothing connected.** The skills and hooks are present but no
   per-instance entry exists yet — the state right after installing. Point at
