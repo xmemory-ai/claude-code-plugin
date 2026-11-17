@@ -52,10 +52,11 @@ One local call, contacting nothing, reports `version` and `authenticated` togeth
   later sessions find `xmemcli`, and use the path the install printed in place of `xmemcli` for
   the rest of these steps. The direct form at the bottom of this section is only for a machine
   where the CLI cannot be installed.
-- **`version` below `0.0.9`** → upgrade it with `uv tool install --upgrade xmemcli`
-  (`pipx upgrade xmemcli` where it came from pipx). `mcp` arrived in 0.0.7, so an older client
-  leaves a server that cannot start, and the emailed sign-in below arrived in 0.0.9. The direct
-  form is only for a machine where it cannot be upgraded.
+- **`version` below `2.0.0`** → upgrade it with `uv tool install --upgrade xmemcli`
+  (`pipx upgrade xmemcli` where it came from pipx); an existing sign-in is kept. A client older
+  than 2.0.0 can no longer finish the emailed sign-in below, and one older than 0.0.7 has no
+  `mcp`, so its server cannot start. The direct form is only for a machine where it cannot be
+  upgraded.
 - **`"authenticated": false`, `rc_file` naming a file other than `~/.xmemrc.json`, or a CLI you
   just installed** → sign the CLI in. Ask for the email address of the user's xmemory account and
   run `xmemcli auth login --rc-dir "$HOME" --email <their-address>` on their behalf: their one
@@ -66,11 +67,18 @@ One local call, contacting nothing, reports `version` and `authenticated` togeth
   connection reads the nearest file, so a project credential keeps shadowing the home one. One
   sign-in then serves this instance and every later client-form entry. Continue after it
   succeeds.
-- **`"authenticated": true`, `rc_file` is `~/.xmemrc.json`, and `version` is at least `0.0.9`** →
+- **`"authenticated": true`, `rc_file` is `~/.xmemrc.json`, and `version` is at least `2.0.0`** →
   go straight to the client form below.
 
 `status` exits 0 whether credentials are present or absent: read the fields, never infer readiness
 from the exit code.
+
+The emailed key takes the organisation's default API role, within the user's own permissions. If the
+sign-in stops because the organisation has none (xmemcli 2.0.0 says "Choose the organisation default
+API role by UUID in the Console", later versions that it "has no default API role yet"), it cannot
+succeed until xmemory sets one. Say so, and offer the user meanwhile to sign in with
+`xmemcli auth login --rc-dir "$HOME"` and create a key with a role on the Console's **API Keys**
+page.
 
 **The client form** — the CLI supplies the credential itself. Use the command for the active
 client and omit the other one from the user-facing answer:
@@ -108,13 +116,14 @@ claude mcp add --transport http xmemory-<id8> "https://mcp.xmemory.ai/instance/<
 codex mcp add xmemory-<id8> --url "https://mcp.xmemory.ai/instance/<id>"
 ```
 
-Its authorization page asks for an xmemory API key, created on the Console's **API Keys** page,
-once per entry — say so before the user meets it — and an entry made this way gives `autoload` no
-credential (see [Does the user need the CLI?](#does-the-user-need-the-cli)). In Claude Code,
-authorize the named server with `/mcp` or `claude mcp login xmemory-<id8>`. In Codex, use
-`codex mcp login xmemory-<id8>`; `/mcp` shows the resulting connection. It does not authorize
-itself merely because it was registered, and an entry added mid-session usually connects only
-after the client restarts — say so rather than reporting it as connected.
+Its authorization page asks for an xmemory API key whose role lets it read that instance and read
+and write its data, created on the Console's **API Keys** page, once per entry — say so before the
+user meets it — and an entry made this way gives `autoload` no credential (see [Does the user need
+the CLI?](#does-the-user-need-the-cli)). In Claude Code, authorize the named server with `/mcp` or
+`claude mcp login xmemory-<id8>`. In Codex, use `codex mcp login xmemory-<id8>`; `/mcp` shows the
+resulting connection. It does not authorize itself merely because it was registered, and an entry
+added mid-session usually connects only after the client restarts — say so rather than reporting it
+as connected.
 
 Keep the two conditions as separate commands, not one shell conditional. This skill is used on
 POSIX shells and PowerShell, so choosing the applicable command in the instructions is portable
@@ -180,6 +189,11 @@ Run `xmemcli org list instances --json`. It reaches the user's instances through
 the CLI already holds, and the same signed-in CLI is what the client-form connection above needs,
 so this is the first thing to try. If the CLI is missing or signed out, the section above says
 how to fix that.
+
+A listing with `"degraded": true` is an object whose `items` hold full records for the instances
+the key may read and only an `id` for the rest, whose names need the permission in
+`missing_permission` (`instance.get`). Show what it has, say the missing names need that
+permission on the key, and point at the Console, which shows them.
 
 If an `xmemory-admin` entry is registered, the **`admin_list_own_instances`** MCP tool returns the
 same listing over that connection — the plugin does not register that entry, so treat its absence
@@ -300,7 +314,7 @@ xmemcli auth login --rc-dir "$HOME" --email <their-address>
 ```
 
 Ask for the email address of the user's xmemory account and run the sign-in on their behalf (it
-needs `xmemcli` `0.0.9` or newer; the install line above brings an older client up to date). The
+needs `xmemcli` `2.0.0` or newer; the install line above brings an older client up to date). The
 CLI reports the email is on its way and waits. The user's single action is opening the sign-in
 email and pressing **Approve** — only for a sign-in they just asked for. The command blocks until
 the approval arrives (up to ten minutes), so run it with a generous timeout and tell the user
@@ -309,7 +323,9 @@ start a second attempt while one is waiting — each attempt sends another email
 exists, running it again sends none. `--rc-dir "$HOME"` writes the credential straight to
 `~/.xmemrc.json`, wherever the command runs, and it is never printed, so it never enters the
 conversation. If the CLI reports that the server offered no cross-device approval, fall
-back to `xmemcli auth login`, which signs in through the browser.
+back to `xmemcli auth login`, which signs in through the browser. If the sign-in stops because
+the organisation has no default API role, see
+[Binding is not the same as connecting](#binding-is-not-the-same-as-connecting) for what to say.
 
 Mention it once, at that moment. Do not bring it up when everything is bound `available`, do not
 repeat it in later sessions, and never block the binding on it — a binding written today starts

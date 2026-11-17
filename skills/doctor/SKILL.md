@@ -39,7 +39,8 @@ If no xmemory tools exist at all, either no instance has been connected here yet
 was registered in this session and the client has not restarted. Both are first-run states,
 not breakage — this skill being available proves the plugin itself is installed. Offer
 `xmemcli instance setup <id>`, which prints the registration commands for this machine, or
-`/xmemory:connect`, then a new session.
+`/xmemory:connect`, then a new session. An entry that is registered and authorized but offers no
+tools at all can also mean its key has no permission on that instance; see the end of check 2.
 
 If the plugin's skills are missing too, the plugin is not installed or the client has not
 reloaded:
@@ -62,17 +63,18 @@ the right one: it takes no arguments, changes nothing, and costs nothing.
 
   - **Stdio with `command: xmemcli`** → it authenticates with the CLI credential. Run
     `xmemcli --json status`, which reports both likely causes locally. A `version` below `0.0.7`
-    predates the `mcp` command, so upgrade with `uv tool install --upgrade xmemcli`. If the version
-    is current but `authenticated` is false, sign the CLI in — on `0.0.9`+ with
-    `xmemcli auth login --rc-dir "$HOME" --email <address>`, where the user only approves the
-    emailed link, or the same without `--email` in the browser. Either fix leaves the MCP
-    configuration intact. If the version is current and credentials are present, the key may have
-    been revoked; the server's failure line distinguishes that case.
+    predates the `mcp` command, so upgrade with `uv tool install --upgrade xmemcli`. If
+    `authenticated` is false, sign the CLI in with
+    `xmemcli auth login --rc-dir "$HOME" --email <address>` (upgrading first below `2.0.0`), where
+    the user only approves the emailed link, or the same without `--email` in the browser. Either
+    fix leaves the MCP configuration intact. If the version is current and credentials are present,
+    the key may have been revoked; the server's failure line distinguishes that case.
   - **Streamable HTTP with no bearer token or `Authorization` header** → it is authorized on
-    xmemory's page, which asks for an xmemory API key from the Console's **API Keys** page. In
-    Claude Code, use `/mcp` or `claude mcp login <server-name>`. In Codex, use
-    `codex mcp login <server-name>`; `/mcp` shows the connection afterward. Where the CLI can be
-    installed, re-registering the entry in the client form needs no key to paste.
+    xmemory's page, which asks for an xmemory API key whose role lets it read that instance and read
+    and write its data, from the Console's **API Keys** page. In Claude Code, use `/mcp` or
+    `claude mcp login <server-name>`. In Codex, use `codex mcp login <server-name>`; `/mcp` shows
+    the connection afterward. Where the CLI can be installed, re-registering the entry in the client
+    form needs no key to paste.
 
   For Codex, `codex mcp get <server-name> --json` reports these as
   `transport.type: "stdio"` and `transport.type: "streamable_http"`. For Claude Code, inspect the
@@ -83,6 +85,15 @@ Report the connected instance id. Users frequently have several instances and ar
 surprised by which one the connection is bound to — one server entry holds one
 connection, fixed by the instance id in its registration: the argument of `xmemcli mcp` for a
 stdio entry, the `/instance/<id>` path for an HTTP one.
+
+A connection offers only the tools that both its grant (for an HTTP entry, the tools chosen on
+xmemory's connect page) and the permissions of the API key behind it allow on this instance. When
+a tool the user expects is missing, or a call is refused for lack of permission, the connection
+works and one of those two lacks it. For a stdio entry, `xmemcli --json auth status` lists the
+permission codes of the key the CLI holds, and `xmemcli --json org key` its role assignments; for
+an HTTP entry, the key is on the Console's **API Keys** page. The fix is a key whose role grants
+the permission on this instance — an organisation admin widens the role, or the user signs in
+through the browser with such a key — never a reinstall.
 
 ## 3. Is anything bound to this directory?
 
@@ -123,14 +134,17 @@ xmemcli --json status     # version and whether local credentials are present
   calling it missing, check `~/.local/bin/xmemcli`, uv's default tool directory: a fresh
   install there is off `PATH` until `uv tool update-shell` and a new shell. The hook searches
   that directory too, so report it as installed but off `PATH`.
-- Installed but older than `0.0.9` → `uv tool install --upgrade xmemcli` first; the emailed
-  sign-in arrived in `0.0.9`.
+- Installed but older than `2.0.0` → `uv tool install --upgrade xmemcli` first, which keeps an
+  existing sign-in; an older client can no longer finish the emailed sign-in.
 - Not signed in, or `rc_file` names a file other than `~/.xmemrc.json` →
   `xmemcli auth login --rc-dir "$HOME" --email <address>` — the CLI waits while the user's one
   action is approving the sign-in email for the attempt they just started — or the same without
-  `--email` in the browser. The hook reads only `~/.xmemrc.json`, so a credential inside the
-  project serves the MCP connection but not the hook. After the home sign-in, suggest deleting
-  the project file, which would otherwise keep shadowing it for the connection.
+  `--email` in the browser. The hook reads only `~/.xmemrc.json`, so a credential inside the project
+  serves the MCP connection but not the hook. After the home sign-in, suggest deleting the project
+  file, which would otherwise keep shadowing it for the connection. If the emailed sign-in stops
+  because the organisation has no default API role yet, xmemory sets it. Meanwhile, sign in with
+  `xmemcli auth login --rc-dir "$HOME"` and create a key with a role on the Console's **API Keys**
+  page.
 
 This is **only** needed for preloading bound instances at session start, because that
 happens in a hook — a separate process that cannot reach the MCP connection's OAuth
