@@ -47,7 +47,7 @@ you can receive. Then uninstall the CLI with `uv tool uninstall xmemcli`.
 3. **Install fails.** Uninstall again, and make the install impossible: run the client with a
    `PATH` that has neither `uv` nor `pipx`, or tell it installing tools is not allowed here.
    Expect: it offers the direct form, and says before you meet the page that it will ask for an
-   xmemory API key from the Console's **API Keys** page.
+   xmemory API key from the Console's **API Keys** page, whose role covers the instance.
 4. **Doctor without the CLI.** With the CLI still uninstalled and an `autoload` binding in the
    scratch directory, run `/xmemory:doctor`. Expect: check 4 names
    `uv tool install --upgrade xmemcli` and the home email sign-in, and the other four checks are
@@ -66,13 +66,13 @@ with what you wrote down at the start.
 
 ### Email sign-in (connect and doctor both lead with it)
 
-Run these with a signed-out CLI (`xmemcli auth logout`) at `0.0.9` or newer, against an
+Run these with a signed-out CLI (`xmemcli auth logout`) at `2.0.0` or newer, against an
 environment whose sign-in emails you can receive.
 
 1. **Command choice.** Ask it to connect. Expect: it asks for your email address and offers
    `xmemcli auth login --rc-dir "$HOME" --email <your-address>` — the browser flow only as a
    fallback, and never a request to paste a key into the chat.
-2. **Version gate.** Repeat with an older CLI on `PATH` (or say the version is `0.0.8`).
+2. **Version gate.** Repeat with an older CLI on `PATH` (or say the version is `1.9.5`).
    Expect: it upgrades with `uv tool install --upgrade xmemcli` before signing in, and never runs
    `--email` on that version.
 3. **Email heads-up.** Let it run the command. Expect: it tells you an email is on its
@@ -93,6 +93,19 @@ environment whose sign-in emails you can receive.
    `xmemcli --json status` reports an `rc_file` there, then ask it to connect. Expect: it signs
    in at home anyway with `--rc-dir "$HOME"`, and asks you to delete the scratch directory's
    `.xmemrc.json` afterwards. Delete it when the step is done.
+
+### Roles and permissions
+
+1. **No default API role.** In an organisation with no default API role, ask to connect with a
+   signed-out CLI. Expect: when the emailed sign-in stops, it says xmemory sets the default API
+   role, and meanwhile offers to sign in with `xmemcli auth login --rc-dir "$HOME"` and create a key
+   with a role on the Console's **API Keys** page.
+2. **A key without a permission.** Connect with a key whose role on the instance lacks
+   `instance.update`. Expect: no suggestion or schema tools; asked for them, it names the key's
+   permissions as the reason, and `/xmemory:doctor` shows them with `xmemcli --json auth status`.
+3. **Ids without names.** With a key that lacks `instance.get` on some instances, ask which
+   instances you have. Expect: it lists those by id, says their names need `instance.get`, and
+   points at the Console.
 
 ## doctor
 
@@ -130,7 +143,7 @@ delete).
    `xmemcli --json status` and `xmemcli --json auth status`, says the CLI must be signed in, and
    offers `xmemcli auth login --rc-dir "$HOME" --email <your-address>`, with the browser only as
    a fallback — it does not go on. With `XMEM_API_KEY` set
-   instead of a sign-in, it goes on without asking. With a CLI older than `1.5.1`, it proposes
+   instead of a sign-in, it goes on without asking. With a CLI older than `2.0.0`, it proposes
    the upgrade.
 2. **One question at a time.** Expect where the docs go, the question list and the doc source
    asked in separate messages, then `discover` output shown as groups, and a scope question.

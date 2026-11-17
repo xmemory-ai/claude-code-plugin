@@ -46,11 +46,12 @@ claude mcp add xmemory-<id8> -- xmemcli mcp <id>
 codex mcp add xmemory-<id8> -- xmemcli mcp <id>
 ```
 
-Check `xmemcli --json status` first and read `version`, `authenticated` and `rc_file` rather
-than its exit code. If the shell does not find the CLI, or `version` is older than `0.0.9` (`mcp`
-arrived in `0.0.7`, the emailed sign-in in `0.0.9`), `uv tool install --upgrade xmemcli` installs
-or upgrades it. If the install says its directory is not on `PATH`, run `uv tool update-shell`,
-and until then register the absolute path it printed, in double quotes.
+Check `xmemcli --json status` first and read `version`, `authenticated` and `rc_file` rather than
+its exit code. If the shell does not find the CLI, or `version` is older than `2.0.0` (an older
+client can no longer finish the emailed sign-in; `mcp` arrived in `0.0.7`),
+`uv tool install --upgrade xmemcli` installs or upgrades it, keeping an existing sign-in. If the
+install says its directory is not on `PATH`, run `uv tool update-shell`, and until then register the
+absolute path it printed, in double quotes.
 
 If `authenticated` is false, or `rc_file` names a file other than `~/.xmemrc.json`, sign in:
 
@@ -64,9 +65,14 @@ Your one action is approving the emailed link. `--rc-dir "$HOME"` puts the key i
 delete it afterwards: the connection reads the nearest file, so it would keep shadowing the home
 one.
 
+The emailed key takes your organisation's default API role, within your own permissions. If the
+sign-in stops because your organisation has none yet, xmemory sets it. Meanwhile, sign in with
+`xmemcli auth login --rc-dir "$HOME"` and create a key with a role on the Console's **API Keys**
+page.
+
 Only if the CLI cannot be installed or upgraded on your machine, use the **direct form**; its
-authorization page asks for an xmemory API key from the Console's **API Keys** page, once per
-entry:
+authorization page asks for an xmemory API key whose role lets it read that instance and read and
+write its data, from the Console's **API Keys** page, once per entry:
 
 ```bash
 # Claude Code — then authorize it with /mcp, or `claude mcp login xmemory-<id8>`
@@ -102,8 +108,9 @@ codex mcp add xmemory-admin --url https://mcp.xmemory.ai/admin
 ```
 
 Direct entries are authorized on first use, on xmemory's authorization page, which asks for an
-xmemory API key from the Console's **API Keys** page. The key goes into that page, never into the
-command or the entry. Connection walkthrough: **https://xmemory.ai/mcp**.
+xmemory API key from the Console's **API Keys** page; the key's permissions decide which tools the
+entry offers. The key goes into that page, never into the command or the entry. Connection
+walkthrough: **https://xmemory.ai/mcp**.
 
 ## Project bindings (`.xmemory.json`)
 
@@ -195,7 +202,7 @@ pages, splits them by section into chunks that name their page and source, write
 `xmemcli`, and keeps a log so a rerun skips what already landed and a changed section is written
 again. It runs with `uv`, which installs its pinned HTML parser libraries (BeautifulSoup, lxml and
 markdownify, locked with hashes in `ingest.py.lock`) on first use; without `uv`, plain Python 3.9
-or newer handles Markdown sources. `xmemcli` 1.5.1 or newer must be installed and
+or newer handles Markdown sources. `xmemcli` 2.0.0 or newer must be installed and
 signed in, or given a key through `XMEM_API_KEY`. Each run keeps its files in a run directory (`xmemory-ingest/<name>` by default)
 under the working directory.
 
@@ -259,6 +266,14 @@ These are the tools an `xmemory-<id8>` entry exposes. With the direct form, the 
 asks for an xmemory API key and lets you choose exactly which to authorize, and the
 **schema-management** group starts unchecked; the client form grants the default groups.
 
+Either way, an entry offers only the tools that its grant and the permissions of the API key
+behind it allow on that instance. `read` needs `data.read` and each write tool its own data
+permission; `get_instance_schema`, `get_setup_instructions`, `list_schema_migrations` and
+`get_schema_migration` need `instance.get` (`get_context_pack` needs it and `data.read`,
+`get_instance_id` either one); the suggestion tools, `update_instance_schema` and
+`dry_run_schema_migration` need `instance.update`; and `enhance_schema` needs
+`instance.generate_schema`. A missing tool usually means the key's role lacks its permission.
+
 **Core memory** (granted by default)
 
 | Tool | What it does |
@@ -269,6 +284,8 @@ asks for an xmemory API key and lets you choose exactly which to authorize, and 
 | `write_status` | Diagnostic only — check once whether a specific async write landed, and how long it took. `queued`, `processing`, `extracting`, `extracted` and `applying` all mean it is still in flight. |
 | `get_instance_id` | Return the instance ID for the current session. |
 | `get_instance_schema` | Return the instance's object/field/relation schema. |
+| `get_context_pack` | Return the instance's session-start context. |
+| `get_setup_instructions` | How to connect this instance on another surface. |
 
 **Schema evolution from real traffic** (granted by default)
 
@@ -305,6 +322,11 @@ without it.
 | `admin_list_clusters`, `admin_get_cluster` | Cluster observability. |
 | `admin_generate_schema` | LLM: generate a fresh schema from a description. |
 | `admin_enhance_schema` | LLM: improve an existing schema. |
+| `admin_validate_yaml_schema`, `admin_convert_json_schema` | Validate an XMD schema; convert a JSON Schema to XMD. |
+| `admin_get_setup_instructions` | How to connect an instance on an agent surface. |
+| `admin_list_instance_memberships`, `admin_edit_instance_memberships` | List and edit which clusters an instance belongs to. |
+| `admin_list_api_keys`, `admin_get_api_key` | Inspect your API keys' metadata and role assignments; never a secret. |
+| `admin_list_mintable_roles`, `admin_create_api_key` | Create a key no wider than this one, bound to one cluster; list the roles it may have first. Refused on an entry authorized on xmemory's page; `xmemcli org create key` does the same. |
 
 ## Support & legal
 

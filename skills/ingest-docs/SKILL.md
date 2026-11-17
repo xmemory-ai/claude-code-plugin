@@ -102,8 +102,9 @@ Read the fields, not the exit codes:
 
 - **`command not found`** → ask to install it: `uv tool install --upgrade xmemcli`. If the
   install says its directory is not on `PATH`, use the path it printed in place of `xmemcli`.
-- **`version` below `1.5.1`** → `uv tool upgrade xmemcli`. The pilot shows what each write
-  changed, which the CLI reports from 1.5.1.
+- **`version` below `2.0.0`** → `uv tool install --upgrade xmemcli`. An older client can no
+  longer finish the emailed sign-in, and the pilot shows what each write changed, which the CLI
+  reports from 1.5.1.
 - **`auth status` says `"authenticated": true`** → ready, whether the key comes from a sign-in
   or from `XMEM_API_KEY` in the environment. Go by `auth status` here: `status` reports only a
   sign-in, so it says `false` when the key comes from the environment.
@@ -121,8 +122,11 @@ To sign in, ask for the email address of the user's xmemory account and run
 sign-in email is on its way and their one action is pressing **Approve**. The command waits up to
 ten minutes, so give it a long timeout, and do not start a second attempt while one is waiting —
 each attempt sends another email; once the key exists, running it again sends none.
-`--rc-dir "$HOME"` keeps the key in `~/.xmemrc.json`, out of the docs directory. Without
-`--email`, the same command opens the Console in a browser instead.
+`--rc-dir "$HOME"` keeps the key in `~/.xmemrc.json`, out of the docs directory. Without `--email`,
+the same command opens the Console in a browser instead. If the emailed sign-in stops because the
+organisation has no default API role yet, xmemory sets it. Meanwhile, sign in with
+`xmemcli auth login --rc-dir "$HOME"` and create a key with a role on the Console's **API Keys**
+page.
 
 Then check `uv --version`. When `uv` is missing, ask to install it — `xmemcli` is usually
 installed with it — or, for sources that are all Markdown, use `python3` 3.9 or newer.
@@ -134,7 +138,8 @@ Ask for three things, **one per message**:
 1. **Where the docs go** — new instances built for them (the default, steps 4–6), or an instance
    the user already has. If they already have one, list their instances with
    `xmemcli --json org list instances` and let them pick (from a long list, ask for the name and
-   match it); then follow
+   match it; with `"degraded": true`, some instances come as an `id` alone, so ask for the id
+   there); then follow
    [Into an existing instance](#into-an-existing-instance) in place of step 4.
 2. **The question list** — 20 to 30 questions the user will actually ask, pasted or as a file.
    Save them one per line to `<run>/questions.txt`. Fewer than ten is fine; say the schema will

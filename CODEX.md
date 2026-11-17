@@ -48,21 +48,25 @@ xmemcli --json status
 codex mcp add xmemory-<id8> -- xmemcli mcp <id>
 ```
 
-Read `version`, `authenticated` and `rc_file` in the status output; its exit code does not
-establish readiness. If the shell does not find the CLI, or `version` is older than `0.0.9`
-(`mcp` arrived in 0.0.7, the emailed sign-in in 0.0.9), `uv tool install --upgrade xmemcli`
-installs or upgrades it. If the install says its directory is not on `PATH`, run
-`uv tool update-shell`, and until then register the absolute path it printed, in double quotes.
+Read `version`, `authenticated` and `rc_file` in the status output; its exit code does not establish
+readiness. If the shell does not find the CLI, or `version` is older than `2.0.0` (an older client
+can no longer finish the emailed sign-in; `mcp` arrived in 0.0.7),
+`uv tool install --upgrade xmemcli` installs or upgrades it, keeping an existing sign-in. If the
+install says its directory is not on `PATH`, run `uv tool update-shell`, and until then register the
+absolute path it printed, in double quotes.
 
 If `authenticated` is false, or `rc_file` names a file other than `~/.xmemrc.json`, run
 `xmemcli auth login --rc-dir "$HOME" --email <address>` before registering the server. The one
 action is approving the emailed link, and `--rc-dir "$HOME"` writes the key to `~/.xmemrc.json`
 wherever it runs, so the session-start hook, which reads only that file, has the credential too.
-Delete a project `.xmemrc.json` afterwards: the connection reads the nearest file, so it would
-keep shadowing the home one.
+Delete a project `.xmemrc.json` afterwards: the connection reads the nearest file, so it would keep
+shadowing the home one. If the sign-in stops because the organisation has no default API role yet,
+xmemory sets it. Meanwhile, sign in with `xmemcli auth login --rc-dir "$HOME"` and create a key with
+a role on the Console's **API Keys** page.
 
 Only if the CLI cannot be installed or upgraded on the machine, use the direct form instead; its
-authorization page asks for an xmemory API key from the Console's **API Keys** page:
+authorization page asks for an xmemory API key whose role lets it read that instance and read and
+write its data, from the Console's **API Keys** page:
 
 ```bash
 codex mcp add xmemory-<id8> --url "https://mcp.xmemory.ai/instance/<id>"

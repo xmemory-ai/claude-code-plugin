@@ -50,9 +50,16 @@ surface judiciously (never nag). `review_suggestions` is **read-only** (it chang
 to show the user what's proposed and why. `decide_suggestions` then `apply_pending_decisions` record
 the user's choices and commit them as a migration, so **always confirm with the user before deciding
 or applying**. Direct schema editing — `update_instance_schema`, `dry_run_schema_migration`,
-`list_schema_migrations`, `get_schema_migration`, `enhance_schema` — is opt-in (may be unavailable
-unless the user granted the "schema management" permission at connect time); confirm before applying
-any change.
+`list_schema_migrations`, `get_schema_migration`, `enhance_schema` — is opt-in (unavailable unless
+the user enabled the connect page's Schema management group); confirm before applying any change.
+
+A connection also offers only the tools that the permissions of the API key behind it allow on
+this instance: `read` and the writes need their data permissions; the schema, the migration
+history and `get_context_pack` need `instance.get` (the context pack `data.read` too); the
+suggestion tools and schema updates need `instance.update`; and `enhance_schema` needs
+`instance.generate_schema`. When a tool you expect is missing, or a call is refused for lack of
+permission, say that the key's permissions or the connection's grant are the reason, not that
+the instance lacks the feature; the `doctor` skill shows what the key holds.
 
 ## How to use
 
@@ -84,7 +91,8 @@ per instance — the plugin bundles none. `xmemcli instance setup <id>` prints t
 commands for this machine, and the plugin's `connect` skill records which instances this project
 uses. An entry that runs `xmemcli mcp <id>` authenticates with the CLI credential; a direct
 `https://mcp.xmemory.ai/instance/<id>` entry is authorized on first use, on a page that asks for an
-xmemory API key. See https://xmemory.ai/mcp for connection help.
+xmemory API key whose role lets it read that instance and read and write its data. See
+https://xmemory.ai/mcp for connection help.
 
 In Codex, when a `.xmemory.json` binding is in scope but no xmemory context was supplied for the
 session, use the bundled `doctor` skill. If doctor finds hooks disabled or awaiting trust, say so
