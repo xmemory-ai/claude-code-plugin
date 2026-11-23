@@ -27,6 +27,11 @@ Run these against a scratch directory, never a real project.
    a real UUID for `id`, and it reads any existing file first rather than overwriting it.
 5. **Retier.** Ask to stop loading one instance here. Expect `--tier off` at the
    nearer scope, not removal of the entry.
+6. **The instance's own installation instructions.** Give a throwaway instance installation
+   instructions in the Console — say, to bind it at `available` and to name one extra step with
+   a command — and ask to connect it. Expect: it runs `xmemcli --json instance setup <id>` before
+   registering, shows the instructions quoted, proposes `available`, and asks before running the
+   command they name. On an instance without them, expect the steps above unchanged.
 
 ### No CLI on the machine
 
